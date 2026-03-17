@@ -141,6 +141,99 @@ describe('App — styling panel: NodeDetailPanel style section', () => {
   });
 });
 
+describe('App — transparent fill swatch', () => {
+  beforeEach(() => {
+    // REVIEW: mocking core dependency — test may not reflect real behavior
+    vi.spyOn(api, 'fetchNodes').mockResolvedValue([styledNode]);
+    vi.spyOn(api, 'fetchEdges').mockResolvedValue([styledEdge]);
+    vi.spyOn(api, 'patchNode').mockResolvedValue({ ...styledNode, bg_color: 'transparent' });
+    vi.spyOn(api, 'patchEdge').mockResolvedValue(styledEdge);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('clicking the default fill swatch calls patchNode with bg_color: "transparent"', async () => {
+    /**
+     * Verifies that clicking the "Default" (none/transparent) fill swatch
+     * persists bg_color as the literal string "transparent" — not null.
+     *
+     * Why: null means "no override, use CSS default", while "transparent" is
+     * an explicit CSS value that makes the node background see-through so the
+     * dark canvas shows through. These are semantically distinct intents.
+     *
+     * What breaks: Users click the transparent swatch expecting a transparent
+     * node but still see the default cream background because null triggers
+     * the CSS variable fallback instead of a transparent override.
+     */
+    // GIVEN App loads with one node and fill swatch panel is visible
+    const patchSpy = vi.spyOn(api, 'patchNode').mockResolvedValue({
+      ...styledNode,
+      bg_color: 'transparent',
+    });
+
+    // WHEN App mounts, node is clicked to open panel, then default fill swatch is clicked
+    const { container } = render(<App />);
+    await waitFor(() => {
+      expect(container.querySelector('.react-flow')).not.toBeNull();
+    });
+
+    const nodeEl = container.querySelector('[data-id="node-style-1"]');
+    expect(nodeEl).not.toBeNull();
+    fireEvent.click(nodeEl!);
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="bg-swatches"]')).not.toBeNull();
+    });
+
+    const defaultFillSwatch = container.querySelector('[data-testid="bg-swatch-default"]');
+    expect(defaultFillSwatch).not.toBeNull();
+    fireEvent.click(defaultFillSwatch!);
+
+    // THEN patchNode is called with bg_color: 'transparent' (not null)
+    await waitFor(() => {
+      expect(patchSpy).toHaveBeenCalledWith(
+        'node-style-1',
+        expect.objectContaining({ bg_color: 'transparent' })
+      );
+    });
+  });
+
+  it('node with bg_color "transparent" renders with background: transparent style', async () => {
+    /**
+     * Verifies that a node loaded from the server with bg_color = "transparent"
+     * receives an inline style of background: transparent, allowing the dark
+     * canvas background to show through.
+     *
+     * Why: The visual effect of a transparent node requires the inline style
+     * override to win over the .kc-node CSS rule that sets a cream background.
+     * Without the override the node always appears cream regardless of the
+     * stored bg_color value.
+     *
+     * What breaks: Reloading the canvas after setting a transparent fill shows
+     * the node as cream again — the transparency is lost on page reload.
+     */
+    // GIVEN a node stored with bg_color 'transparent' is loaded from the server
+    const transparentNode: CanvasNodeData = { ...styledNode, bg_color: 'transparent' };
+    // REVIEW: mocking core dependency — test may not reflect real behavior
+    vi.spyOn(api, 'fetchNodes').mockResolvedValue([transparentNode]);
+
+    // WHEN App mounts
+    const { container } = render(<App />);
+    await waitFor(() => {
+      expect(container.querySelector('.react-flow')).not.toBeNull();
+    });
+
+    // THEN the node element has inline background: transparent
+    await waitFor(() => {
+      const nodeEl = container.querySelector('[data-id="node-style-1"] .kc-node');
+      expect(nodeEl).not.toBeNull();
+      expect((nodeEl as HTMLElement).style.background).toBe('transparent');
+    });
+  });
+});
+
 describe('App — styling panel: EdgeDetailPanel', () => {
   beforeEach(() => {
     // REVIEW: mocking core dependency — test may not reflect real behavior

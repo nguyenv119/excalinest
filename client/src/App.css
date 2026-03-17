@@ -653,6 +653,13 @@ body,
   background: rgba(196, 85, 80, 0.08);
 }
 
+/* Extra breathing room above the Style section — separates it visually from Notes */
+.kc-panel__field + .kc-panel__field:last-child {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--ui-border);
+}
+
 /* ─── Style Row (label + swatch/toggle group) ──────────────────────────── */
 
 .kc-style-row {
@@ -703,27 +710,37 @@ body,
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
 }
 
-/* Active: show a small ring around the swatch */
+/* Active: 2px white ring with 2px gap for strong contrast on dark backgrounds */
 .kc-swatch--active {
-  box-shadow: 0 0 0 2px var(--accent);
+  box-shadow: 0 0 0 2px var(--canvas-bg), 0 0 0 4px rgba(255, 255, 255, 0.75);
   transform: scale(1.1);
 }
 
 .kc-swatch--active:hover {
-  box-shadow: 0 0 0 2px var(--accent);
+  box-shadow: 0 0 0 2px var(--canvas-bg), 0 0 0 4px rgba(255, 255, 255, 0.9);
 }
 
-/* "Default / none" swatch gets an × mark */
-.kc-swatch:first-child::after {
-  content: '×';
+/* "None" stroke swatch — diagonal strikethrough line */
+[data-testid="stroke-swatches"] .kc-swatch:first-child::before,
+[data-testid="edge-stroke-swatches"] .kc-swatch:first-child::before {
+  content: '';
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.35);
-  line-height: 1;
+  width: 130%;
+  height: 1.5px;
+  background: rgba(255, 255, 255, 0.4);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+/* "Transparent" fill swatch — checkerboard pattern */
+[data-testid="bg-swatches"] .kc-swatch:first-child {
+  background: repeating-conic-gradient(
+    rgba(255, 255, 255, 0.18) 0% 25%,
+    rgba(255, 255, 255, 0.04) 0% 50%
+  ) 0 0 / 7px 7px !important;
 }
 
 /* ─── Style Toggle Buttons ───────────────────────────────────────────────── */
@@ -763,4 +780,41 @@ body,
 
 .kc-style-toggle--active:hover {
   background: rgba(208, 122, 90, 0.14);
+}
+
+/* ─── WIDTH toggle visual weight ────────────────────────────────────────── */
+/* Thin: lighter weight + smaller size so it reads as a fine line */
+[data-testid="border-width-thin"],
+[data-testid="edge-stroke-width-thin"] {
+  font-size: 10px;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+}
+
+/* Medium: default weight, keep as-is */
+[data-testid="border-width-medium"],
+[data-testid="edge-stroke-width-medium"] {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Thick: bold and large so it reads as a heavy stroke */
+[data-testid="border-width-thick"],
+[data-testid="edge-stroke-width-thick"] {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* ─── LINE toggle visual style ───────────────────────────────────────────── */
+/* Increase size slightly across all line style toggles for legibility */
+[data-testid="border-style-solid"],
+[data-testid="border-style-dashed"],
+[data-testid="border-style-dotted"],
+[data-testid="edge-stroke-style-solid"],
+[data-testid="edge-stroke-style-dashed"],
+[data-testid="edge-stroke-style-dotted"] {
+  font-size: 15px;
+  letter-spacing: 0.04em;
 }

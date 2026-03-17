@@ -33,8 +33,9 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
   const connection = useConnection();
 
   // Build inline style overrides from style data fields
+  // bg_color can be 'transparent' (explicit see-through) or a hex color; null = no override
   const cardStyle: React.CSSProperties = {};
-  if (bg_color) cardStyle.background = bg_color;
+  if (bg_color !== null) cardStyle.background = bg_color;
   if (border_color) cardStyle.borderColor = border_color;
   if (border_width) {
     const widthMap: Record<string, string> = { thin: '1px', medium: '2px', thick: '3.5px' };

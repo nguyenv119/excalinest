@@ -13,7 +13,7 @@ const STROKE_COLORS = [
 ];
 
 const BG_COLORS = [
-  { id: 'default', label: 'Default', color: null, display: 'transparent', border: 'rgba(255,255,255,0.15)' },
+  { id: 'default', label: 'Transparent', color: 'transparent', display: 'transparent', border: 'rgba(255,255,255,0.15)' },
   { id: 'pink', label: 'Pink', color: '#fce7f3', display: '#fce7f3', border: null },
   { id: 'mint', label: 'Mint', color: '#dcfce7', display: '#dcfce7', border: null },
   { id: 'sky', label: 'Sky', color: '#e0f2fe', display: '#e0f2fe', border: null },
