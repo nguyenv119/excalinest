@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -37,6 +37,7 @@ import {
   deleteEdge,
 } from './api';
 import type { CanvasNodeData } from './api';
+import { buildChildMap, getDescendants } from './collapse';
 
 // ─── nodeTypes defined OUTSIDE the component ────────────────────────────────
 // CRITICAL: If defined inline inside App(), React Flow receives a new object
@@ -45,20 +46,61 @@ const nodeTypes = { canvasNode: CanvasNode };
 
 // ─── Converters ──────────────────────────────────────────────────────────────
 
-function dbNodeToFlowNode(n: CanvasNodeData): CanvasNodeType {
+/**
+ * Convert a DB node to a React Flow node.
+ *
+ * `hiddenIds` is the set of node IDs that should be hidden because an ancestor
+ * is collapsed. Passed in at load time so the initial render respects persisted
+ * collapsed state.
+ *
+ * `childMap` is used to determine hasChildren.
+ *
+ * `onToggleCollapse` is the stable callback reference from App.
+ */
+function dbNodeToFlowNode(
+  n: CanvasNodeData,
+  childMap: Map<string, string[]>,
+  hiddenIds: Set<string>,
+  onToggleCollapse: (id: string) => void
+): CanvasNodeType {
   return {
     id: n.id,
     type: 'canvasNode',
     position: { x: n.x, y: n.y },
-    data: { title: n.title, notes: n.notes },
+    data: {
+      title: n.title,
+      notes: n.notes,
+      hasChildren: childMap.has(n.id),
+      collapsed: n.collapsed === 1,
+      onToggleCollapse,
+    },
     ...(n.parent_id
       ? { parentId: n.parent_id, extent: 'parent' as const }
       : {}),
     ...(n.width != null && n.height != null
       ? { style: { width: n.width, height: n.height } }
       : {}),
-    hidden: false,
+    hidden: hiddenIds.has(n.id),
   };
+}
+
+/**
+ * Compute the set of node IDs that should be hidden because an ancestor has
+ * collapsed=1. Walks all collapsed nodes and collects their descendants.
+ */
+function computeInitialHiddenIds(
+  dbNodes: CanvasNodeData[],
+  childMap: Map<string, string[]>
+): Set<string> {
+  const hidden = new Set<string>();
+  for (const n of dbNodes) {
+    if (n.collapsed === 1) {
+      for (const id of getDescendants(n.id, childMap)) {
+        hidden.add(id);
+      }
+    }
+  }
+  return hidden;
 }
 
 // ─── App ─────────────────────────────────────────────────────────────────────
@@ -71,6 +113,63 @@ export default function App() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
+
+  // ─── childMap derived from current nodes ──────────────────────────────────
+  // Derived purely from node topology (id + parentId). We keep it in a ref
+  // so the collapse callback can always read the latest value without being
+  // listed as a dep (which would force recreation on every topology change).
+  const childMap = useMemo(() => {
+    return buildChildMap(nodes.map((n) => ({ id: n.id, parent_id: n.parentId ?? null })));
+  }, [nodes]);
+
+  const childMapRef = useRef<Map<string, string[]>>(childMap);
+  childMapRef.current = childMap;
+
+  // ─── Nodes ref (for reading current state in stable callbacks) ───────────
+  const nodesRef = useRef<CanvasNodeType[]>(nodes);
+  nodesRef.current = nodes;
+
+  // ─── Collapse / expand ────────────────────────────────────────────────────
+  // CRITICAL: stable ref via useCallback([]) + nodesRef/childMapRef to avoid
+  // including `childMap` or `nodes` in deps. If we included them,
+  // onToggleCollapse would change on every node state update, which is in
+  // node.data, triggering an infinite re-render loop.
+  const onToggleCollapse = useCallback((id: string) => {
+    const currentNodes = nodesRef.current;
+    const node = currentNodes.find((n) => n.id === id);
+    if (!node) return;
+
+    const newCollapsed = !node.data.collapsed;
+    const currentChildMap = childMapRef.current;
+    const descendants = getDescendants(id, currentChildMap);
+    const descendantSet = new Set(descendants);
+
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.id === id) {
+          return { ...n, data: { ...n.data, collapsed: newCollapsed } };
+        }
+        if (descendantSet.has(n.id)) {
+          return { ...n, hidden: newCollapsed };
+        }
+        return n;
+      })
+    );
+
+    setEdges((eds) =>
+      eds.map((e) => {
+        const affectsEdge =
+          descendantSet.has(e.source) || descendantSet.has(e.target);
+        if (!affectsEdge) return e;
+        return { ...e, hidden: newCollapsed };
+      })
+    );
+
+    // Persist collapsed state to server (fire-and-forget)
+    patchNode(id, { collapsed: newCollapsed ? 1 : 0 }).catch((err) =>
+      console.error('Failed to persist collapsed state:', err)
+    );
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── React Flow controlled-mode handlers ──────────────────────────────────
   const onNodesChange: OnNodesChange<CanvasNodeType> = useCallback(
@@ -187,9 +286,34 @@ export default function App() {
   );
 
   // ─── Node creation ────────────────────────────────────────────────────────
-  const handleNodeCreated = useCallback((dbNode: CanvasNodeData) => {
-    setNodes((nds) => [...nds, dbNodeToFlowNode(dbNode)]);
-  }, []);
+  // onToggleCollapse is stable (useCallback([], [])), so it's safe to include
+  // in deps without causing re-creation on node topology changes.
+  const handleNodeCreated = useCallback(
+    (dbNode: CanvasNodeData) => {
+      setNodes((nds) => {
+        // Rebuild childMap from the current nodes + the new node to get correct
+        // hasChildren for the parent.
+        const allNodes = [
+          ...nds.map((n) => ({ id: n.id, parent_id: n.parentId ?? null })),
+          { id: dbNode.id, parent_id: dbNode.parent_id },
+        ];
+        const newChildMap = buildChildMap(allNodes);
+
+        // If the new node has a parent, update the parent's hasChildren flag
+        const updated = dbNode.parent_id
+          ? nds.map((n) =>
+              n.id === dbNode.parent_id
+                ? { ...n, data: { ...n.data, hasChildren: true } }
+                : n
+            )
+          : nds;
+
+        const newNode = dbNodeToFlowNode(dbNode, newChildMap, new Set(), onToggleCollapse);
+        return [...updated, newNode];
+      });
+    },
+    [onToggleCollapse]
+  );
 
   // ─── Node update (from panel) ──────────────────────────────────────────────
   const handleNodeUpdate = useCallback(
@@ -219,8 +343,17 @@ export default function App() {
           fetchEdges(),
         ]);
 
-        setNodes(dbNodes.map(dbNodeToFlowNode));
+        // Build childMap from DB data first so we can compute hidden state
+        const initialChildMap = buildChildMap(dbNodes);
+        const hiddenIds = computeInitialHiddenIds(dbNodes, initialChildMap);
 
+        setNodes(
+          dbNodes.map((n) =>
+            dbNodeToFlowNode(n, initialChildMap, hiddenIds, onToggleCollapse)
+          )
+        );
+
+        // Compute hidden edges (source or target is in hiddenIds)
         setEdges(
           dbEdges.map((e) => ({
             id: e.id,
@@ -229,6 +362,7 @@ export default function App() {
             sourceHandle: e.source_handle ?? undefined,
             targetHandle: e.target_handle ?? undefined,
             label: e.label ?? undefined,
+            hidden: hiddenIds.has(e.source_id) || hiddenIds.has(e.target_id),
           }))
         );
       } catch (err) {
@@ -241,6 +375,8 @@ export default function App() {
     }
 
     load();
+    // onToggleCollapse is stable (empty deps), so this is safe
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {
