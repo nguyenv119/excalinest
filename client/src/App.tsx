@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
-  Background,
-  BackgroundVariant,
   Controls,
   MiniMap,
   SelectionMode,
@@ -165,6 +163,7 @@ function dbNodeToFlowNode(
       bg_color: n.bg_color,
       border_width: n.border_width,
       border_style: n.border_style,
+      font_color: n.font_color,
     },
     ...(n.parent_id
       ? { parentId: n.parent_id, extent: 'parent' as const }
@@ -514,6 +513,7 @@ export default function App() {
       bg_color?: string | null;
       border_width?: string | null;
       border_style?: string | null;
+      font_color?: string | null;
     }) => {
       // Optimistic local update
       setNodes((nds) =>
@@ -634,7 +634,6 @@ export default function App() {
         fitView
         fitViewOptions={{ padding: 0.2 }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
         <Controls />
         <MiniMap nodeColor="#d07a5a" maskColor="rgba(43,45,42,0.75)" />
         <Toolbar onNodeCreated={handleNodeCreated} mode={mode} onToggleMode={setMode} />

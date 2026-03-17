@@ -20,6 +20,7 @@ export type CanvasNodeType = Node<
     bg_color: string | null;
     border_width: string | null;
     border_style: string | null;
+    font_color: string | null;
   },
   'canvasNode'
 >;
@@ -29,7 +30,7 @@ export type CanvasNodeType = Node<
 // inline definition causes infinite re-renders.
 export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
   const { title, notes, hasChildren, collapsed, onToggleCollapse, onAddChild, onNodeResized,
-    border_color, bg_color, border_width, border_style } = data;
+    border_color, bg_color, border_width, border_style, font_color } = data;
   const connection = useConnection();
 
   // Build inline style overrides from style data fields
@@ -71,9 +72,11 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
     [id, onAddChild]
   );
 
+  const isTransparent = bg_color === 'transparent';
+
   return (
     <div
-      className={`kc-node${selected ? ' selected' : ''}${connection.inProgress ? ' show-handles' : ''}`}
+      className={`kc-node${selected ? ' selected' : ''}${connection.inProgress ? ' show-handles' : ''}${isTransparent ? ' kc-node--transparent' : ''}`}
       style={cardStyle}
     >
       <NodeResizer
@@ -92,7 +95,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
       <Handle type="target" position={Position.Right} id="right-target" />
       <Handle type="source" position={Position.Right} id="right-source" />
 
-      <div className="kc-node__inner">
+      <div className="kc-node__inner" style={{ color: font_color ?? 'inherit' }}>
         <div className="kc-node__header">
           <p className="kc-node__title">{title}</p>
           <div className="kc-node__header-actions">

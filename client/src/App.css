@@ -4,7 +4,6 @@
 
 :root {
   --canvas-bg: #292929;
-  --canvas-dot: rgba(255, 255, 255, 0.035);
   --card-bg: #f3f1ec;
   --card-border: #dedad2;
   --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.06);
@@ -41,11 +40,6 @@ body,
 
 .react-flow__background {
   background: var(--canvas-bg);
-}
-
-.react-flow__background pattern circle,
-.react-flow__background pattern rect {
-  fill: var(--canvas-dot);
 }
 
 /* ─── Controls & MiniMap ────────────────────────────────────────────────── */
@@ -139,6 +133,47 @@ body,
 
 .kc-node.selected {
   border-color: var(--accent);
+}
+
+/* ─── Transparent node — anchored to dark canvas ──────────────────────────── */
+/* When a node has explicit transparent fill it needs visual anchoring:        */
+/* white border + light text so it remains legible on the dark canvas.        */
+
+.kc-node--transparent {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+}
+
+.kc-node--transparent:hover {
+  border-color: rgba(255, 255, 255, 0.48) !important;
+}
+
+.kc-node--transparent.selected {
+  border-color: var(--accent) !important;
+}
+
+.kc-node--transparent .kc-node__title {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.kc-node--transparent .kc-node__notes {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.kc-node--transparent .kc-node__notes--empty {
+  color: rgba(255, 255, 255, 0.25);
+  opacity: 1; /* override the default 0.4 that stacks with a dimmer base */
+}
+
+/* Collapse / add-child buttons: lighten on transparent bg */
+.kc-node--transparent .kc-node__collapse-btn,
+.kc-node--transparent .kc-node__add-child-btn {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* Handle fill adapts — use canvas-bg so the ring reads as a gap */
+.kc-node--transparent .react-flow__handle {
+  background: var(--canvas-bg);
 }
 
 .kc-node__inner {
