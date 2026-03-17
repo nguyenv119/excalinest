@@ -10,8 +10,6 @@ import { makeNodesRouter } from './nodes';
  * Each test gets its own DB instance so tests never share state.
  */
 function buildTestApp() {
-  // REVIEW: mocking core dependency — test may not reflect real behavior
-  // Actually using real in-memory SQLite — no mock needed here.
   const db = new Database(':memory:');
   db.pragma('journal_mode = WAL');
   db.exec(`
