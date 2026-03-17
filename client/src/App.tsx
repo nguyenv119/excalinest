@@ -20,6 +20,7 @@ import type {
   OnReconnect,
   OnEdgesDelete,
   NodeMouseHandler,
+  EdgeMouseHandler,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import './App.css';
@@ -28,6 +29,7 @@ import { CanvasNode } from './components/CanvasNode';
 import type { CanvasNodeType } from './components/CanvasNode';
 import { Toolbar } from './components/Toolbar';
 import { NodeDetailPanel } from './components/NodeDetailPanel';
+import { EdgeDetailPanel } from './components/EdgeDetailPanel';
 import {
   fetchNodes,
   fetchEdges,
@@ -38,7 +40,7 @@ import {
   patchEdge,
   deleteEdge,
 } from './api';
-import type { CanvasNodeData } from './api';
+import type { CanvasNodeData, CanvasEdge as CanvasEdgeData } from './api';
 import { buildChildMap, getDescendants } from './collapse';
 
 // ─── nodeTypes defined OUTSIDE the component ────────────────────────────────
@@ -92,6 +94,10 @@ function dbNodeToFlowNode(
       onToggleCollapse,
       onAddChild,
       onNodeResized,
+      border_color: n.border_color,
+      bg_color: n.bg_color,
+      border_width: n.border_width,
+      border_style: n.border_style,
     },
     ...(n.parent_id
       ? { parentId: n.parent_id, extent: 'parent' as const }
@@ -128,9 +134,13 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  // Edge style data map: keyed by edge id, stores the DB-level style fields
+  const [edgeStyleMap, setEdgeStyleMap] = useState<Map<string, Pick<CanvasEdgeData, 'stroke_color' | 'stroke_width' | 'stroke_style'>>>(new Map());
   const [mode, setMode] = useState<'pan' | 'select'>('pan');
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
+  const selectedEdgeStyle = selectedEdgeId ? (edgeStyleMap.get(selectedEdgeId) ?? { stroke_color: null, stroke_width: null, stroke_style: null }) : null;
 
   // ─── childMap derived from current nodes ──────────────────────────────────
   // Derived purely from node topology (id + parentId). We keep it in a ref
@@ -239,11 +249,25 @@ export default function App() {
 
   // ─── Selection ────────────────────────────────────────────────────────────────
   const onNodeClick: NodeMouseHandler<CanvasNodeType> = useCallback(
-    (_event, node) => setSelectedNodeId(node.id),
+    (_event, node) => {
+      setSelectedNodeId(node.id);
+      setSelectedEdgeId(null);
+    },
     []
   );
 
-  const onPaneClick = useCallback(() => setSelectedNodeId(null), []);
+  const onEdgeClick: EdgeMouseHandler = useCallback(
+    (_event, edge) => {
+      setSelectedEdgeId(edge.id);
+      setSelectedNodeId(null);
+    },
+    []
+  );
+
+  const onPaneClick = useCallback(() => {
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+  }, []);
 
   // ─── Mode keyboard shortcuts (V = select, H = pan) ────────────────────────
   useEffect(() => {
@@ -286,6 +310,11 @@ export default function App() {
             label: dbEdge.label ?? undefined,
           },
         ]);
+        setEdgeStyleMap((prev) => {
+          const next = new Map(prev);
+          next.set(dbEdge.id, { stroke_color: null, stroke_width: null, stroke_style: null });
+          return next;
+        });
       })
       .catch((err) => console.error('Failed to create edge:', err));
   }, []);
@@ -301,6 +330,15 @@ export default function App() {
   }, []);
 
   const handleEdgesDelete: OnEdgesDelete = useCallback((deletedEdges) => {
+    const deletedEdgeIds = new Set(deletedEdges.map((e) => e.id));
+    // Clear selected edge if it was deleted
+    setSelectedEdgeId((prev) => (prev && deletedEdgeIds.has(prev) ? null : prev));
+    // Clean up edge style map
+    setEdgeStyleMap((prev) => {
+      const next = new Map(prev);
+      for (const id of deletedEdgeIds) next.delete(id);
+      return next;
+    });
     for (const e of deletedEdges) {
       deleteEdge(e.id).catch((err) =>
         console.error('Failed to delete edge:', err)
@@ -412,7 +450,14 @@ export default function App() {
 
   // ─── Node update (from panel) ──────────────────────────────────────────────
   const handleNodeUpdate = useCallback(
-    (id: string, patch: { title?: string; notes?: string }) => {
+    (id: string, patch: {
+      title?: string;
+      notes?: string;
+      border_color?: string | null;
+      bg_color?: string | null;
+      border_width?: string | null;
+      border_style?: string | null;
+    }) => {
       // Optimistic local update
       setNodes((nds) =>
         nds.map((n) =>
@@ -428,6 +473,26 @@ export default function App() {
   );
 
   const handlePanelClose = useCallback(() => setSelectedNodeId(null), []);
+  const handleEdgePanelClose = useCallback(() => setSelectedEdgeId(null), []);
+
+  // ─── Edge style update (from EdgeDetailPanel) ─────────────────────────────
+  const handleEdgeStyleUpdate = useCallback(
+    (id: string, patch: { stroke_color?: string | null; stroke_width?: string | null; stroke_style?: string | null }) => {
+      // Optimistic local update of the edge style map
+      setEdgeStyleMap((prev) => {
+        const next = new Map(prev);
+        const existing = next.get(id) ?? { stroke_color: null, stroke_width: null, stroke_style: null };
+        next.set(id, { ...existing, ...patch });
+        return next;
+      });
+      // Update edge appearance in React Flow state via data (stored separately)
+      // Fire-and-forget persist
+      patchEdge(id, patch).catch((err) =>
+        console.error('Failed to persist edge style update:', err)
+      );
+    },
+    []
+  );
 
   // ─── Initial data load ────────────────────────────────────────────────────
   useEffect(() => {
@@ -459,6 +524,14 @@ export default function App() {
             label: e.label ?? undefined,
             hidden: hiddenIds.has(e.source_id) || hiddenIds.has(e.target_id),
           }))
+        );
+
+        // Populate edge style map from DB data
+        setEdgeStyleMap(
+          new Map(dbEdges.map((e) => [
+            e.id,
+            { stroke_color: e.stroke_color, stroke_width: e.stroke_width, stroke_style: e.stroke_style },
+          ]))
         );
       } catch (err) {
         setError(
@@ -512,6 +585,7 @@ export default function App() {
         onNodeDragStop={onNodeDragStop}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
+        onEdgeClick={onEdgeClick}
         onConnect={handleConnect}
         onReconnect={handleReconnect}
         onNodesDelete={handleNodesDelete}
@@ -535,6 +609,12 @@ export default function App() {
         onUpdate={handleNodeUpdate}
         onDelete={handleDeleteNode}
         onClose={handlePanelClose}
+      />
+      <EdgeDetailPanel
+        edgeId={selectedEdgeId}
+        edgeStyle={selectedEdgeStyle}
+        onUpdate={handleEdgeStyleUpdate}
+        onClose={handleEdgePanelClose}
       />
     </>
   );

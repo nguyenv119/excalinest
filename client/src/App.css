@@ -652,3 +652,115 @@ body,
 .kc-panel__delete-btn:active {
   background: rgba(196, 85, 80, 0.08);
 }
+
+/* ─── Style Row (label + swatch/toggle group) ──────────────────────────── */
+
+.kc-style-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.kc-style-row:last-child {
+  margin-bottom: 0;
+}
+
+.kc-style-row__label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--ui-text-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  min-width: 36px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+/* ─── Color Swatches ─────────────────────────────────────────────────────── */
+
+.kc-style-swatches {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.kc-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s, box-shadow 0.1s;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.kc-swatch:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
+}
+
+/* Active: show a small ring around the swatch */
+.kc-swatch--active {
+  box-shadow: 0 0 0 2px var(--accent);
+  transform: scale(1.1);
+}
+
+.kc-swatch--active:hover {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* "Default / none" swatch gets an × mark */
+.kc-swatch:first-child::after {
+  content: '×';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  line-height: 1;
+}
+
+/* ─── Style Toggle Buttons ───────────────────────────────────────────────── */
+
+.kc-style-toggles {
+  display: flex;
+  gap: 3px;
+}
+
+.kc-style-toggle {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  color: var(--ui-text-dim);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  padding: 4px 9px;
+  cursor: pointer;
+  transition: color 0.1s, background 0.1s, border-color 0.1s;
+  line-height: 1;
+  min-width: 34px;
+  text-align: center;
+  user-select: none;
+}
+
+.kc-style-toggle:hover {
+  color: var(--ui-text);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.kc-style-toggle--active {
+  color: var(--accent);
+  background: rgba(208, 122, 90, 0.1);
+  border-color: rgba(208, 122, 90, 0.3);
+}
+
+.kc-style-toggle--active:hover {
+  background: rgba(208, 122, 90, 0.14);
+}

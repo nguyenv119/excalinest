@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import type React from 'react';
 import { Handle, Position, NodeResizer, useConnection } from '@xyflow/react';
 import type { Node, NodeProps, ResizeDragEvent } from '@xyflow/react';
 import { patchNode } from '../api';
@@ -14,6 +15,11 @@ export type CanvasNodeType = Node<
     onToggleCollapse: (id: string) => void;
     onAddChild: (id: string) => void;
     onNodeResized: (id: string, width: number, height: number) => void;
+    // Style fields — mirror DB columns; null = use default
+    border_color: string | null;
+    bg_color: string | null;
+    border_width: string | null;
+    border_style: string | null;
   },
   'canvasNode'
 >;
@@ -22,8 +28,21 @@ export type CanvasNodeType = Node<
 // NOTE: nodeTypes must be defined OUTSIDE the component in App.tsx —
 // inline definition causes infinite re-renders.
 export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
-  const { title, notes, hasChildren, collapsed, onToggleCollapse, onAddChild, onNodeResized } = data;
+  const { title, notes, hasChildren, collapsed, onToggleCollapse, onAddChild, onNodeResized,
+    border_color, bg_color, border_width, border_style } = data;
   const connection = useConnection();
+
+  // Build inline style overrides from style data fields
+  const cardStyle: React.CSSProperties = {};
+  if (bg_color) cardStyle.background = bg_color;
+  if (border_color) cardStyle.borderColor = border_color;
+  if (border_width) {
+    const widthMap: Record<string, string> = { thin: '1px', medium: '2px', thick: '3.5px' };
+    cardStyle.borderWidth = widthMap[border_width] ?? border_width;
+  }
+  if (border_style) {
+    cardStyle.borderStyle = border_style;
+  }
 
   const handleResizeEnd = useCallback(
     (_event: ResizeDragEvent, params: { x: number; y: number; width: number; height: number }) => {
@@ -52,7 +71,10 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
   );
 
   return (
-    <div className={`kc-node${selected ? ' selected' : ''}${connection.inProgress ? ' show-handles' : ''}`}>
+    <div
+      className={`kc-node${selected ? ' selected' : ''}${connection.inProgress ? ' show-handles' : ''}`}
+      style={cardStyle}
+    >
       <NodeResizer
         minWidth={150}
         minHeight={60}
