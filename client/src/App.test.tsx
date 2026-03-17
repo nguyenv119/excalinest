@@ -37,7 +37,7 @@ const mockEdge: CanvasEdge = {
   created_at: '2024-01-01T00:00:00Z',
 };
 
-describe('App — onNodeDragStop', () => {
+describe('App — smoke test', () => {
   beforeEach(() => {
     // REVIEW: mocking core dependency — test may not reflect real behavior
     vi.spyOn(api, 'fetchNodes').mockResolvedValue([mockNode]);
