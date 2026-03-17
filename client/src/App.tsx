@@ -84,7 +84,6 @@ function dbNodeToFlowNode(
     id: n.id,
     type: 'canvasNode',
     position: { x: n.x, y: n.y },
-    dragHandle: '.kc-node__header',
     data: {
       title: n.title,
       notes: n.notes,
@@ -522,6 +521,7 @@ export default function App() {
         selectionOnDrag={mode === 'select'}
         selectionMode={SelectionMode.Partial}
         multiSelectionKeyCode={['Meta', 'Control']}
+        maxZoom={8}
         fitView
         fitViewOptions={{ padding: 0.2 }}
       >

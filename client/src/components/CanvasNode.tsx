@@ -58,6 +58,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
         minHeight={60}
         isVisible={!!selected}
         color="var(--accent)"
+        handleStyle={{ width: 12, height: 12, borderRadius: 3 }}
         onResizeEnd={handleResizeEnd}
       />
       {/* Top — source + target */}
