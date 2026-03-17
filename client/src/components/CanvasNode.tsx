@@ -5,13 +5,22 @@ import { patchNode } from '../api';
 
 // ─── Node type definition ────────────────────────────────────────────────────
 // Exported so App.tsx can use it as the Node generic for the state array.
-export type CanvasNodeType = Node<{ title: string; notes: string }, 'canvasNode'>;
+export type CanvasNodeType = Node<
+  {
+    title: string;
+    notes: string;
+    hasChildren: boolean;
+    collapsed: boolean;
+    onToggleCollapse: (id: string) => void;
+  },
+  'canvasNode'
+>;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 // NOTE: nodeTypes must be defined OUTSIDE the component in App.tsx —
 // inline definition causes infinite re-renders.
 export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
-  const { title, notes } = data;
+  const { title, notes, hasChildren, collapsed, onToggleCollapse } = data;
   const connection = useConnection();
 
   const handleResizeEnd = useCallback(
@@ -21,6 +30,14 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
       );
     },
     [id]
+  );
+
+  const handleCollapseClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation(); // don't trigger node selection
+      onToggleCollapse(id);
+    },
+    [id, onToggleCollapse]
   );
 
   return (
@@ -41,7 +58,19 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
       <Handle type="source" position={Position.Right} id="right-source" />
 
       <div className="kc-node__inner">
-        <p className="kc-node__title">{title}</p>
+        <div className="kc-node__header">
+          <p className="kc-node__title">{title}</p>
+          {hasChildren && (
+            <button
+              data-testid="collapse-toggle"
+              className="kc-node__collapse-btn"
+              onClick={handleCollapseClick}
+              title={collapsed ? 'Expand children' : 'Collapse children'}
+            >
+              {collapsed ? '▶' : '▼'}
+            </button>
+          )}
+        </div>
         {notes ? (
           <p className="kc-node__notes">{notes}</p>
         ) : (

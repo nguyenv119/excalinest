@@ -143,13 +143,41 @@ body,
   padding: 14px 16px 12px;
 }
 
+.kc-node__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
 .kc-node__title {
   font-size: 13.5px;
   font-weight: 600;
   color: var(--card-title-color);
   line-height: 1.35;
-  margin: 0 0 4px;
+  margin: 0;
   word-break: break-word;
+  flex: 1;
+}
+
+.kc-node__collapse-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  padding: 0 2px;
+  cursor: pointer;
+  font-size: 9px;
+  color: var(--card-notes-color);
+  line-height: 1;
+  opacity: 0.55;
+  transition: opacity 0.1s, color 0.1s;
+  margin-top: 2px;
+}
+
+.kc-node__collapse-btn:hover {
+  opacity: 1;
+  color: var(--accent);
 }
 
 .kc-node__notes {
