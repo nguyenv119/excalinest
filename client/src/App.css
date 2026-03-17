@@ -121,6 +121,7 @@ body,
 
 .kc-node {
   min-width: 150px;
+  height: 100%;
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   border-radius: 6px;
@@ -149,6 +150,7 @@ body,
   justify-content: space-between;
   gap: 6px;
   margin-bottom: 4px;
+  cursor: grab;
 }
 
 .kc-node__title {
