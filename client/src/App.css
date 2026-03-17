@@ -98,7 +98,7 @@ body,
 /* ─── Canvas Node Card ──────────────────────────────────────────────────── */
 
 .kc-node {
-  width: 200px;
+  min-width: 150px;
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   border-radius: 6px;
@@ -201,6 +201,20 @@ body,
 
 .react-flow__handle-right {
   right: -4px;
+}
+
+/* ─── Resize Controls ──────────────────────────────────────────────────── */
+
+.react-flow__resize-control.handle {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--accent);
+  border: none;
+}
+
+.react-flow__resize-control.line {
+  border-color: var(--accent);
 }
 
 /* ─── Loading State ─────────────────────────────────────────────────────── */

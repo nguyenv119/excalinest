@@ -7,6 +7,8 @@ export interface CanvasNodeData {
   notes: string;
   x: number;
   y: number;
+  width: number | null;
+  height: number | null;
   collapsed: 0 | 1;
   created_at: string;
   updated_at: string;

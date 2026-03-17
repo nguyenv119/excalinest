@@ -54,6 +54,9 @@ function dbNodeToFlowNode(n: CanvasNodeData): CanvasNodeType {
     ...(n.parent_id
       ? { parentId: n.parent_id, extent: 'parent' as const }
       : {}),
+    ...(n.width != null && n.height != null
+      ? { style: { width: n.width, height: n.height } }
+      : {}),
     hidden: false,
   };
 }
