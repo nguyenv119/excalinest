@@ -43,6 +43,73 @@ import {
 import type { CanvasNodeData, CanvasEdge as CanvasEdgeData } from './api';
 import { buildChildMap, getDescendants } from './collapse';
 
+// ─── Edge style helpers ──────────────────────────────────────────────────────
+
+const STROKE_WIDTH_MAP: Record<string, number> = {
+  thin: 1,
+  medium: 2,
+  thick: 4,
+};
+
+const STROKE_DASH_MAP: Record<string, string> = {
+  dashed: '5 5',
+  dotted: '2 2',
+};
+
+/**
+ * Build a React Flow Edge from a DB edge row.
+ * Stores DB-level style fields in `data` (single source of truth) and applies
+ * them as CSS `style` properties so React Flow renders the correct appearance.
+ */
+function dbEdgeToFlowEdge(e: CanvasEdgeData, hiddenIds: Set<string>): Edge {
+  const strokeColor = e.stroke_color ?? undefined;
+  const strokeWidth = e.stroke_width ? (STROKE_WIDTH_MAP[e.stroke_width] ?? undefined) : undefined;
+  const strokeDasharray = e.stroke_style ? (STROKE_DASH_MAP[e.stroke_style] ?? undefined) : undefined;
+  return {
+    id: e.id,
+    source: e.source_id,
+    target: e.target_id,
+    sourceHandle: e.source_handle ?? undefined,
+    targetHandle: e.target_handle ?? undefined,
+    label: e.label ?? undefined,
+    hidden: hiddenIds.has(e.source_id) || hiddenIds.has(e.target_id),
+    data: {
+      stroke_color: e.stroke_color,
+      stroke_width: e.stroke_width,
+      stroke_style: e.stroke_style,
+    },
+    style: {
+      ...(strokeColor ? { stroke: strokeColor } : {}),
+      ...(strokeWidth !== undefined ? { strokeWidth } : {}),
+      ...(strokeDasharray ? { strokeDasharray } : {}),
+    },
+  };
+}
+
+/**
+ * Apply a style patch to an existing React Flow Edge.
+ * Merges DB-level fields into `data` and recomputes `style`.
+ */
+function applyEdgeStylePatch(
+  edge: Edge,
+  patch: { stroke_color?: string | null; stroke_width?: string | null; stroke_style?: string | null }
+): Edge {
+  const prevData = (edge.data ?? {}) as { stroke_color?: string | null; stroke_width?: string | null; stroke_style?: string | null };
+  const nextData = { ...prevData, ...patch };
+  const strokeColor = nextData.stroke_color ?? undefined;
+  const strokeWidth = nextData.stroke_width ? (STROKE_WIDTH_MAP[nextData.stroke_width] ?? undefined) : undefined;
+  const strokeDasharray = nextData.stroke_style ? (STROKE_DASH_MAP[nextData.stroke_style] ?? undefined) : undefined;
+  return {
+    ...edge,
+    data: nextData,
+    style: {
+      ...(strokeColor ? { stroke: strokeColor } : {}),
+      ...(strokeWidth !== undefined ? { strokeWidth } : {}),
+      ...(strokeDasharray ? { strokeDasharray } : {}),
+    },
+  };
+}
+
 // ─── nodeTypes defined OUTSIDE the component ────────────────────────────────
 // CRITICAL: If defined inline inside App(), React Flow receives a new object
 // reference on every render, triggering infinite re-renders.
@@ -135,12 +202,22 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  // Edge style data map: keyed by edge id, stores the DB-level style fields
-  const [edgeStyleMap, setEdgeStyleMap] = useState<Map<string, Pick<CanvasEdgeData, 'stroke_color' | 'stroke_width' | 'stroke_style'>>>(new Map());
   const [mode, setMode] = useState<'pan' | 'select'>('pan');
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
-  const selectedEdgeStyle = selectedEdgeId ? (edgeStyleMap.get(selectedEdgeId) ?? { stroke_color: null, stroke_width: null, stroke_style: null }) : null;
+  // Derive edge style from edges state (single source of truth) — no separate edgeStyleMap
+  const selectedEdgeStyle = selectedEdgeId
+    ? (() => {
+        const e = edges.find((ed) => ed.id === selectedEdgeId);
+        if (!e) return null;
+        const d = (e.data ?? {}) as { stroke_color?: string | null; stroke_width?: string | null; stroke_style?: string | null };
+        return {
+          stroke_color: d.stroke_color ?? null,
+          stroke_width: d.stroke_width ?? null,
+          stroke_style: d.stroke_style ?? null,
+        };
+      })()
+    : null;
 
   // ─── childMap derived from current nodes ──────────────────────────────────
   // Derived purely from node topology (id + parentId). We keep it in a ref
@@ -299,22 +376,7 @@ export default function App() {
       target_handle: connection.targetHandle,
     })
       .then((dbEdge) => {
-        setEdges((eds) => [
-          ...eds,
-          {
-            id: dbEdge.id,
-            source: dbEdge.source_id,
-            target: dbEdge.target_id,
-            sourceHandle: dbEdge.source_handle ?? undefined,
-            targetHandle: dbEdge.target_handle ?? undefined,
-            label: dbEdge.label ?? undefined,
-          },
-        ]);
-        setEdgeStyleMap((prev) => {
-          const next = new Map(prev);
-          next.set(dbEdge.id, { stroke_color: null, stroke_width: null, stroke_style: null });
-          return next;
-        });
+        setEdges((eds) => [...eds, dbEdgeToFlowEdge(dbEdge, new Set())]);
       })
       .catch((err) => console.error('Failed to create edge:', err));
   }, []);
@@ -333,12 +395,6 @@ export default function App() {
     const deletedEdgeIds = new Set(deletedEdges.map((e) => e.id));
     // Clear selected edge if it was deleted
     setSelectedEdgeId((prev) => (prev && deletedEdgeIds.has(prev) ? null : prev));
-    // Clean up edge style map
-    setEdgeStyleMap((prev) => {
-      const next = new Map(prev);
-      for (const id of deletedEdgeIds) next.delete(id);
-      return next;
-    });
     for (const e of deletedEdges) {
       deleteEdge(e.id).catch((err) =>
         console.error('Failed to delete edge:', err)
@@ -379,6 +435,7 @@ export default function App() {
         eds.filter((e) => e.source !== id && e.target !== id)
       );
       setSelectedNodeId(null);
+      setSelectedEdgeId(null);
 
       deleteNode(id).catch((err) =>
         console.error('Failed to delete node:', err)
@@ -478,14 +535,10 @@ export default function App() {
   // ─── Edge style update (from EdgeDetailPanel) ─────────────────────────────
   const handleEdgeStyleUpdate = useCallback(
     (id: string, patch: { stroke_color?: string | null; stroke_width?: string | null; stroke_style?: string | null }) => {
-      // Optimistic local update of the edge style map
-      setEdgeStyleMap((prev) => {
-        const next = new Map(prev);
-        const existing = next.get(id) ?? { stroke_color: null, stroke_width: null, stroke_style: null };
-        next.set(id, { ...existing, ...patch });
-        return next;
-      });
-      // Update edge appearance in React Flow state via data (stored separately)
+      // Optimistic update: apply style directly to edges state (single source of truth)
+      setEdges((eds) =>
+        eds.map((e) => (e.id === id ? applyEdgeStylePatch(e, patch) : e))
+      );
       // Fire-and-forget persist
       patchEdge(id, patch).catch((err) =>
         console.error('Failed to persist edge style update:', err)
@@ -513,26 +566,8 @@ export default function App() {
           )
         );
 
-        // Compute hidden edges (source or target is in hiddenIds)
-        setEdges(
-          dbEdges.map((e) => ({
-            id: e.id,
-            source: e.source_id,
-            target: e.target_id,
-            sourceHandle: e.source_handle ?? undefined,
-            targetHandle: e.target_handle ?? undefined,
-            label: e.label ?? undefined,
-            hidden: hiddenIds.has(e.source_id) || hiddenIds.has(e.target_id),
-          }))
-        );
-
-        // Populate edge style map from DB data
-        setEdgeStyleMap(
-          new Map(dbEdges.map((e) => [
-            e.id,
-            { stroke_color: e.stroke_color, stroke_width: e.stroke_width, stroke_style: e.stroke_style },
-          ]))
-        );
+        // Convert DB edges to React Flow edges with style data embedded
+        setEdges(dbEdges.map((e) => dbEdgeToFlowEdge(e, hiddenIds)));
       } catch (err) {
         setError(
           err instanceof Error ? err.message : 'Failed to load canvas data'
@@ -616,6 +651,19 @@ export default function App() {
         onUpdate={handleEdgeStyleUpdate}
         onClose={handleEdgePanelClose}
       />
+      {/* Test-only: expose edge IDs for programmatic selection in JSDOM tests,
+          where React Flow SVG edges are not rendered. Hidden from users. */}
+      {(import.meta as unknown as { env: { MODE: string } }).env.MODE === 'test' && (
+        <div data-testid="edge-click-triggers" style={{ display: 'none' }}>
+          {edges.map((e) => (
+            <button
+              key={e.id}
+              data-testid={`select-edge-${e.id}`}
+              onClick={() => { setSelectedEdgeId(e.id); setSelectedNodeId(null); }}
+            />
+          ))}
+        </div>
+      )}
     </>
   );
 }

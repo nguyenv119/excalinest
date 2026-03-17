@@ -20,6 +20,7 @@ const styledNode: CanvasNodeData = {
   bg_color: null,
   border_width: null,
   border_style: null,
+  font_size: null,
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
 };
@@ -52,16 +53,18 @@ describe('App — styling panel: NodeDetailPanel style section', () => {
     vi.restoreAllMocks();
   });
 
-  it('node detail panel renders a Style section with stroke swatches', async () => {
+  it('Style section renders all controls when a node is selected', async () => {
     /**
-     * Verifies that NodeDetailPanel contains a "Style" section with stroke
-     * color swatches when a node is selected.
+     * Verifies that NodeDetailPanel renders all four style control groups
+     * (stroke swatches, background swatches, border width toggles, border style
+     * toggles) when a node is selected.
      *
      * Why: The styling section is the primary UI surface for bead 8j4.4.
-     * Without it, users have no way to change node appearance through the panel.
+     * Each control group targets a different style dimension (color, fill,
+     * weight, line-style). Missing any group means users lose that dimension.
      *
-     * What breaks: Nodes are permanently styled with the default appearance and
-     * the style controls never appear regardless of selection state.
+     * What breaks: Clicking a node opens the panel but one or more style
+     * control groups are absent, silently preventing certain style changes.
      */
     // GIVEN the App has loaded with one node
 
@@ -72,115 +75,31 @@ describe('App — styling panel: NodeDetailPanel style section', () => {
     });
 
     const nodeEl = container.querySelector('[data-id="node-style-1"]');
-    if (nodeEl) fireEvent.click(nodeEl);
+    expect(nodeEl).not.toBeNull();
+    fireEvent.click(nodeEl!);
 
-    // THEN the NodeDetailPanel shows a Style section with stroke swatches
+    // THEN the NodeDetailPanel shows all four style control groups
     await waitFor(() => {
-      const strokeSwatches = container.querySelector('[data-testid="stroke-swatches"]');
-      expect(strokeSwatches).not.toBeNull();
+      expect(container.querySelector('[data-testid="stroke-swatches"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="bg-swatches"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="border-width-toggles"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="border-style-toggles"]')).not.toBeNull();
     });
   });
 
-  it('node detail panel renders background swatches', async () => {
+  it('clicking a stroke swatch marks it active (aria-pressed) and persists to server', async () => {
     /**
-     * Verifies that NodeDetailPanel contains background color swatches in the
-     * Style section when a node is selected.
-     *
-     * Why: Background fill is a distinct style dimension from stroke color.
-     * Nodes should support both independently so users can create visual
-     * groupings (e.g., pastel fills for different topics).
-     *
-     * What breaks: Users can only change border color but not fill; the canvas
-     * lacks visual differentiation between node groups.
-     */
-    // GIVEN the App has loaded with one node
-
-    // WHEN App mounts and we click the node to select it
-    const { container } = render(<App />);
-    await waitFor(() => {
-      expect(container.querySelector('.react-flow')).not.toBeNull();
-    });
-
-    const nodeEl = container.querySelector('[data-id="node-style-1"]');
-    if (nodeEl) fireEvent.click(nodeEl);
-
-    // THEN the NodeDetailPanel shows background swatches
-    await waitFor(() => {
-      const bgSwatches = container.querySelector('[data-testid="bg-swatches"]');
-      expect(bgSwatches).not.toBeNull();
-    });
-  });
-
-  it('node detail panel renders border width toggle buttons', async () => {
-    /**
-     * Verifies that NodeDetailPanel contains width toggle buttons (thin/medium/thick)
-     * in the Style section when a node is selected.
-     *
-     * Why: Border width is a key visual property for distinguishing important
-     * nodes. Without toggle buttons, users cannot adjust stroke emphasis.
-     *
-     * What breaks: All nodes have the same border weight; there is no way to
-     * visually call out a critical or highlighted node.
-     */
-    // GIVEN the App has loaded with one node
-
-    // WHEN App mounts and we click the node to select it
-    const { container } = render(<App />);
-    await waitFor(() => {
-      expect(container.querySelector('.react-flow')).not.toBeNull();
-    });
-
-    const nodeEl = container.querySelector('[data-id="node-style-1"]');
-    if (nodeEl) fireEvent.click(nodeEl);
-
-    // THEN the NodeDetailPanel shows border width toggle group
-    await waitFor(() => {
-      const widthToggles = container.querySelector('[data-testid="border-width-toggles"]');
-      expect(widthToggles).not.toBeNull();
-    });
-  });
-
-  it('node detail panel renders border style toggle buttons', async () => {
-    /**
-     * Verifies that NodeDetailPanel contains style toggle buttons (solid/dashed/dotted)
-     * in the Style section when a node is selected.
-     *
-     * Why: Border style (solid vs. dashed vs. dotted) lets users distinguish
-     * between different node states or categories at a glance.
-     *
-     * What breaks: Nodes can only have solid borders, removing a dimension of
-     * visual categorization from the canvas.
-     */
-    // GIVEN the App has loaded with one node
-
-    // WHEN App mounts and we click the node to select it
-    const { container } = render(<App />);
-    await waitFor(() => {
-      expect(container.querySelector('.react-flow')).not.toBeNull();
-    });
-
-    const nodeEl = container.querySelector('[data-id="node-style-1"]');
-    if (nodeEl) fireEvent.click(nodeEl);
-
-    // THEN the NodeDetailPanel shows border style toggle group
-    await waitFor(() => {
-      const styleToggles = container.querySelector('[data-testid="border-style-toggles"]');
-      expect(styleToggles).not.toBeNull();
-    });
-  });
-
-  it('clicking a stroke swatch calls patchNode with border_color immediately', async () => {
-    /**
-     * Verifies that clicking a stroke color swatch immediately calls patchNode
-     * with the selected border_color — no debounce is needed for discrete picks.
+     * Verifies that clicking a stroke color swatch immediately persists via
+     * patchNode AND marks the swatch as the active selection in the DOM via
+     * aria-pressed.
      *
      * Why: Style picks are discrete choices (not continuous text entry), so
-     * they should persist immediately without a debounce delay. Delayed
-     * persistence would feel sluggish and leave the user unsure if the action
-     * registered.
+     * they should persist immediately without debounce. aria-pressed makes the
+     * active state machine-readable for both tests and assistive technology.
      *
-     * What breaks: Clicking a color swatch appears to work but the color is
-     * never saved — or is saved only after the user clicks elsewhere.
+     * What breaks: Clicking a color swatch appears to work but either the
+     * color is never saved, or the swatch stays visually unselected so the
+     * user cannot tell which color is active.
      */
     // GIVEN the App has loaded with one node and patchNode is mocked
     const patchSpy = vi.spyOn(api, 'patchNode').mockResolvedValue({
@@ -195,14 +114,16 @@ describe('App — styling panel: NodeDetailPanel style section', () => {
     });
 
     const nodeEl = container.querySelector('[data-id="node-style-1"]');
-    if (nodeEl) fireEvent.click(nodeEl);
+    expect(nodeEl).not.toBeNull();
+    fireEvent.click(nodeEl!);
 
     await waitFor(() => {
       expect(container.querySelector('[data-testid="stroke-swatches"]')).not.toBeNull();
     });
 
     const swatchBtn = container.querySelector('[data-testid="stroke-swatch-red"]');
-    if (swatchBtn) fireEvent.click(swatchBtn);
+    expect(swatchBtn).not.toBeNull();
+    fireEvent.click(swatchBtn!);
 
     // THEN patchNode is called with border_color: '#ef4444'
     await waitFor(() => {
@@ -210,6 +131,12 @@ describe('App — styling panel: NodeDetailPanel style section', () => {
         'node-style-1',
         expect.objectContaining({ border_color: '#ef4444' })
       );
+    });
+
+    // AND the swatch is marked active in the DOM
+    await waitFor(() => {
+      const swatch = container.querySelector('[data-testid="stroke-swatch-red"]');
+      expect(swatch?.getAttribute('aria-pressed')).toBe('true');
     });
   });
 });
@@ -250,32 +177,41 @@ describe('App — styling panel: EdgeDetailPanel', () => {
     expect(container.querySelector('[data-testid="edge-detail-panel"]')).toBeNull();
   });
 
-  it('EdgeDetailPanel renders stroke swatches (no background swatches)', async () => {
+  it('EdgeDetailPanel renders stroke swatches but no bg-swatches when an edge is selected', async () => {
     /**
-     * Verifies that EdgeDetailPanel exposes stroke color swatches but does NOT
-     * expose background (fill) swatches, since edges have no fill.
+     * Verifies that EdgeDetailPanel shows stroke color swatches but does NOT
+     * show background (fill) swatches, since edges have no fill.
      *
      * Why: Showing fill controls for edges would be confusing and meaningless —
      * edges are lines, not shapes. Hiding irrelevant controls keeps the panel
      * focused and avoids user confusion.
      *
      * What breaks: Users see a "Background" swatch row in the EdgeDetailPanel
-     * and click it, expecting the edge to change fill — nothing happens and
+     * and click it expecting the edge fill to change — nothing happens and
      * the user is confused.
+     *
+     * Note: React Flow SVG edges do not render in JSDOM. We trigger onEdgeClick
+     * via a test-only hidden button (data-testid="select-edge-{id}") that App
+     * renders when import.meta.env.MODE === 'test'.
      */
-    // GIVEN App is loaded and we simulate edge selection by rendering EdgeDetailPanel directly
-    // We test this via the component contract through App's onEdgeClick
-    // Since simulating a React Flow edge click is complex, we verify the panel
-    // renders correctly when selectedEdgeId is set in App state.
-    // The observable outcome: after App loads, there is no bg-swatches in the edge panel.
+    // GIVEN App has loaded with a node and an edge
 
-    // WHEN App mounts (no edge selected yet)
+    // WHEN App mounts
     const { container } = render(<App />);
     await waitFor(() => {
       expect(container.querySelector('.react-flow')).not.toBeNull();
     });
 
-    // THEN there is no edge detail panel bg-swatches visible (panel is not shown)
+    // Trigger edge selection via the test-only trigger button (replicates onEdgeClick)
+    const edgeTrigger = container.querySelector('[data-testid="select-edge-edge-style-1"]');
+    expect(edgeTrigger).not.toBeNull();
+    fireEvent.click(edgeTrigger!);
+
+    // THEN EdgeDetailPanel appears with stroke swatches but without bg-swatches
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="edge-detail-panel"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="edge-stroke-swatches"]')).not.toBeNull();
+    });
     expect(container.querySelector('[data-testid="edge-bg-swatches"]')).toBeNull();
   });
 });

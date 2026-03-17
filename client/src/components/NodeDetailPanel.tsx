@@ -204,6 +204,7 @@ export function NodeDetailPanel({
                 <button
                   key={s.id}
                   data-testid={`stroke-swatch-${s.id}`}
+                  aria-pressed={activeStroke === s.color}
                   className={`kc-swatch${activeStroke === s.color ? ' kc-swatch--active' : ''}`}
                   title={s.label}
                   onClick={() => handleStrokeColor(s.color)}
