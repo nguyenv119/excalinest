@@ -3,7 +3,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  --canvas-bg: #2b2d2a;
+  --canvas-bg: #292929;
   --canvas-dot: rgba(255, 255, 255, 0.035);
   --card-bg: #f3f1ec;
   --card-border: #dedad2;
@@ -84,7 +84,7 @@ body,
 }
 
 .react-flow__minimap-mask {
-  fill: rgba(43, 45, 42, 0.7);
+  fill: rgba(41, 41, 41, 0.7);
 }
 
 /* ─── Edge Styles ───────────────────────────────────────────────────────── */
