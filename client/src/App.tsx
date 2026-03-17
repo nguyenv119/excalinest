@@ -636,7 +636,7 @@ export default function App() {
         fitView
         fitViewOptions={{ padding: 0.2 }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={24} size={0.75} color="rgba(255,255,255,0.045)" />
+        <Background variant={BackgroundVariant.Dots} gap={24} size={0.75}/>
         <Controls />
         <MiniMap nodeColor="#d07a5a" maskColor="rgba(43,45,42,0.75)" />
         <Toolbar onNodeCreated={handleNodeCreated} mode={mode} onToggleMode={setMode} />
