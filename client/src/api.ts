@@ -34,12 +34,16 @@ export async function fetchEdges(): Promise<CanvasEdge[]> {
   return res.json();
 }
 
-// ─── Stubs (implemented in later beads) ─────────────────────────────────────
-
 export async function createNode(
-  _data: Partial<CanvasNodeData>
+  data: Partial<CanvasNodeData>
 ): Promise<CanvasNodeData> {
-  return Promise.resolve({} as CanvasNodeData);
+  const res = await fetch('/nodes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`createNode failed: ${res.status}`);
+  return res.json();
 }
 
 export async function patchNode(

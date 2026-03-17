@@ -12,7 +12,8 @@ import './App.css';
 
 import { CanvasNode } from './components/CanvasNode';
 import type { CanvasNodeType } from './components/CanvasNode';
-import { fetchNodes, fetchEdges, patchNode } from './api';
+import { Toolbar } from './components/Toolbar';
+import { fetchNodes, fetchEdges, patchNode, createNode } from './api';
 import type { CanvasNodeData } from './api';
 
 // ─── nodeTypes defined OUTSIDE the component ────────────────────────────────
@@ -50,6 +51,21 @@ export default function App() {
     patchNode(node.id, { x: node.position.x, y: node.position.y }).catch(
       (err) => console.error('Failed to persist node position:', err)
     );
+  }, []);
+
+  // ─── Add root node ──────────────────────────────────────────────────────────
+  const handleAddNode = useCallback(async () => {
+    try {
+      const newNode = await createNode({
+        title: 'New Node',
+        notes: '',
+        x: 100,
+        y: 100,
+      });
+      setNodes((prev) => [...prev, dbNodeToFlowNode(newNode)]);
+    } catch (err) {
+      console.error('Failed to create node:', err);
+    }
   }, []);
 
   useEffect(() => {
@@ -121,6 +137,7 @@ export default function App() {
       <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
       <Controls />
       <MiniMap nodeColor="#c8a96e" maskColor="rgba(26,28,34,0.75)" />
+      <Toolbar onAddNode={handleAddNode} />
     </ReactFlow>
   );
 }
