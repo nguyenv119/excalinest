@@ -31,6 +31,7 @@ import { NodeDetailPanel } from './components/NodeDetailPanel';
 import {
   fetchNodes,
   fetchEdges,
+  createNode,
   patchNode,
   deleteNode,
   createEdge,
@@ -54,16 +55,31 @@ const nodeTypes = { canvasNode: CanvasNode };
  * is collapsed. Passed in at load time so the initial render respects persisted
  * collapsed state.
  *
- * `childMap` is used to determine hasChildren.
+ * `childMap` is used to determine hasChildren and to set initial style
+ * dimensions on parent nodes (required by React Flow for subflows).
  *
- * `onToggleCollapse` is the stable callback reference from App.
+ * `onToggleCollapse` and `onAddChild` are stable callback references from App.
  */
 function dbNodeToFlowNode(
   n: CanvasNodeData,
   childMap: Map<string, string[]>,
   hiddenIds: Set<string>,
-  onToggleCollapse: (id: string) => void
+  onToggleCollapse: (id: string) => void,
+  onAddChild: (id: string) => void,
+  onNodeResized: (id: string, width: number, height: number) => void
 ): CanvasNodeType {
+  const hasChildren = childMap.has(n.id);
+  // Parent nodes with children need explicit dimensions for React Flow subflows
+  // (extent: 'parent' requires a known parent size). We fall back to explicit
+  // width/height stored in DB; if none, use defaults when the node has children.
+  const styleFromDb = n.width != null && n.height != null
+    ? { width: n.width, height: n.height }
+    : null;
+  const styleFromChildren = hasChildren && !styleFromDb
+    ? { width: 320, height: 240 }
+    : null;
+  const style = styleFromDb ?? styleFromChildren ?? undefined;
+
   return {
     id: n.id,
     type: 'canvasNode',
@@ -72,16 +88,16 @@ function dbNodeToFlowNode(
     data: {
       title: n.title,
       notes: n.notes,
-      hasChildren: childMap.has(n.id),
+      hasChildren,
       collapsed: n.collapsed === 1,
       onToggleCollapse,
+      onAddChild,
+      onNodeResized,
     },
     ...(n.parent_id
       ? { parentId: n.parent_id, extent: 'parent' as const }
       : {}),
-    ...(n.width != null && n.height != null
-      ? { style: { width: n.width, height: n.height } }
-      : {}),
+    ...(style ? { style } : {}),
     hidden: hiddenIds.has(n.id),
   };
 }
@@ -171,6 +187,33 @@ export default function App() {
     // Persist collapsed state to server (fire-and-forget)
     patchNode(id, { collapsed: newCollapsed ? 1 : 0 }).catch((err) =>
       console.error('Failed to persist collapsed state:', err)
+    );
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Add child node ────────────────────────────────────────────────────────
+  // CRITICAL: stable ref via useCallback([]) + handleNodeCreatedRef so that
+  // this callback doesn't change on every node state update. If it changed,
+  // every node re-render would receive a new onAddChild reference → infinite
+  // re-render loop.
+  const handleNodeCreatedRef = useRef<(dbNode: CanvasNodeData) => void>(
+    () => { /* filled in after handleNodeCreated is defined */ }
+  );
+
+  const handleAddChild = useCallback((parentId: string) => {
+    createNode({ title: 'New Node', parent_id: parentId, x: 50, y: 60 })
+      .then((dbNode) => handleNodeCreatedRef.current(dbNode))
+      .catch((err) => console.error('Failed to create child node:', err));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Node resize state sync ────────────────────────────────────────────────
+  // Called by CanvasNode's handleResizeEnd to keep React Flow node style in
+  // sync with the post-resize dimensions. Stable (empty deps) because it only
+  // writes to state via a functional updater — no closure deps needed.
+  const handleNodeResized = useCallback((id: string, width: number, height: number) => {
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.id === id ? { ...n, style: { ...n.style, width, height } } : n
+      )
     );
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -308,8 +351,9 @@ export default function App() {
   );
 
   // ─── Node creation ────────────────────────────────────────────────────────
-  // onToggleCollapse is stable (useCallback([], [])), so it's safe to include
-  // in deps without causing re-creation on node topology changes.
+  // onToggleCollapse and handleAddChild are both stable (empty deps),
+  // so it's safe to include them in deps without causing re-creation on
+  // node topology changes.
   const handleNodeCreated = useCallback(
     (dbNode: CanvasNodeData) => {
       setNodes((nds) => {
@@ -322,20 +366,50 @@ export default function App() {
         const newChildMap = buildChildMap(allNodes);
 
         // If the new node has a parent, update the parent's hasChildren flag
+        // and ensure it has explicit style dimensions (required by React Flow
+        // for nodes that act as subflow containers via extent: 'parent').
         const updated = dbNode.parent_id
-          ? nds.map((n) =>
-              n.id === dbNode.parent_id
-                ? { ...n, data: { ...n.data, hasChildren: true } }
-                : n
-            )
+          ? nds.map((n) => {
+              if (n.id !== dbNode.parent_id) return n;
+              const alreadyHasChildren = n.data.hasChildren;
+              // Only apply default dimensions if the parent has no explicit
+              // style set yet — don't override user-resized dimensions.
+              const needsDimensions =
+                !alreadyHasChildren &&
+                (n.style?.width == null && n.style?.height == null);
+              return {
+                ...n,
+                data: { ...n.data, hasChildren: true },
+                ...(needsDimensions ? { style: { ...n.style, width: 320, height: 240 } } : {}),
+              };
+            })
           : nds;
 
-        const newNode = dbNodeToFlowNode(dbNode, newChildMap, new Set(), onToggleCollapse);
+        // If the parent is currently collapsed, the new child must start hidden.
+        const parentNode = dbNode.parent_id
+          ? nds.find((n) => n.id === dbNode.parent_id)
+          : undefined;
+        const hiddenIds =
+          parentNode?.data.collapsed === true
+            ? new Set([dbNode.id])
+            : new Set<string>();
+
+        const newNode = dbNodeToFlowNode(
+          dbNode,
+          newChildMap,
+          hiddenIds,
+          onToggleCollapse,
+          handleAddChild,
+          handleNodeResized
+        );
         return [...updated, newNode];
       });
     },
-    [onToggleCollapse]
+    [onToggleCollapse, handleAddChild, handleNodeResized]
   );
+
+  // Keep handleNodeCreatedRef in sync so handleAddChild can call it stably
+  handleNodeCreatedRef.current = handleNodeCreated;
 
   // ─── Node update (from panel) ──────────────────────────────────────────────
   const handleNodeUpdate = useCallback(
@@ -371,7 +445,7 @@ export default function App() {
 
         setNodes(
           dbNodes.map((n) =>
-            dbNodeToFlowNode(n, initialChildMap, hiddenIds, onToggleCollapse)
+            dbNodeToFlowNode(n, initialChildMap, hiddenIds, onToggleCollapse, handleAddChild, handleNodeResized)
           )
         );
 
