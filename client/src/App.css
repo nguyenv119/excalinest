@@ -89,10 +89,15 @@ body,
   stroke-width: 1.5;
 }
 
-.react-flow__edge.selected .react-flow__edge-path,
 .react-flow__edge:hover .react-flow__edge-path {
   stroke: var(--accent);
   stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 4px rgba(200, 169, 110, 0.6));
 }
 
 /* ─── Canvas Node Card ──────────────────────────────────────────────────── */
@@ -188,19 +193,19 @@ body,
 }
 
 .react-flow__handle-top {
-  top: -4px;
+  top: -3px;
 }
 
 .react-flow__handle-bottom {
-  bottom: -4px;
+  bottom: -3px;
 }
 
 .react-flow__handle-left {
-  left: -4px;
+  left: -3px;
 }
 
 .react-flow__handle-right {
-  right: -4px;
+  right: -3px;
 }
 
 /* ─── Resize Controls ──────────────────────────────────────────────────── */
