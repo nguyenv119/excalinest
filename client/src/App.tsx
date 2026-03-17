@@ -12,6 +12,7 @@ import type {
   Edge,
   OnNodeDrag,
   OnNodesChange,
+  OnNodesDelete,
   OnEdgesChange,
   OnConnect,
   OnEdgesDelete,
@@ -28,6 +29,7 @@ import {
   fetchNodes,
   fetchEdges,
   patchNode,
+  deleteNode,
   createEdge,
   deleteEdge,
 } from './api';
@@ -119,6 +121,47 @@ export default function App() {
       );
     }
   }, []);
+
+  // ─── Node deletion ─────────────────────────────────────────────────────────
+  // Fired by React Flow after backspace/delete key removes nodes from state.
+  // onNodesChange already handled the local state removal; this persists to server.
+  const handleNodesDelete: OnNodesDelete<CanvasNodeType> = useCallback(
+    (deletedNodes) => {
+      const deletedIds = new Set(deletedNodes.map((n) => n.id));
+
+      // Clear selection if deleted node was selected
+      setSelectedNodeId((prev) => (prev && deletedIds.has(prev) ? null : prev));
+
+      // Remove edges connected to deleted nodes from local state
+      setEdges((eds) =>
+        eds.filter((e) => !deletedIds.has(e.source) && !deletedIds.has(e.target))
+      );
+
+      // Persist to server (server cascades edge deletion)
+      for (const n of deletedNodes) {
+        deleteNode(n.id).catch((err) =>
+          console.error('Failed to delete node:', err)
+        );
+      }
+    },
+    []
+  );
+
+  // Delete node from panel button — must handle both local state and server
+  const handleDeleteNode = useCallback(
+    (id: string) => {
+      setNodes((nds) => nds.filter((n) => n.id !== id));
+      setEdges((eds) =>
+        eds.filter((e) => e.source !== id && e.target !== id)
+      );
+      setSelectedNodeId(null);
+
+      deleteNode(id).catch((err) =>
+        console.error('Failed to delete node:', err)
+      );
+    },
+    []
+  );
 
   // ─── Node creation ────────────────────────────────────────────────────────
   const handleNodeCreated = useCallback((dbNode: CanvasNodeData) => {
@@ -214,6 +257,7 @@ export default function App() {
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         onConnect={handleConnect}
+        onNodesDelete={handleNodesDelete}
         onEdgesDelete={handleEdgesDelete}
         fitView
         fitViewOptions={{ padding: 0.2 }}
@@ -226,6 +270,7 @@ export default function App() {
       <NodeDetailPanel
         node={selectedNode}
         onUpdate={handleNodeUpdate}
+        onDelete={handleDeleteNode}
         onClose={handlePanelClose}
       />
     </>

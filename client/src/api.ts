@@ -61,9 +61,9 @@ export async function patchNode(
   return res.json();
 }
 
-// Stub — implemented in KC-1.11
-export async function deleteNode(_id: string): Promise<void> {
-  return Promise.resolve();
+export async function deleteNode(id: string): Promise<void> {
+  const res = await fetch(`/nodes/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`deleteNode failed: ${res.status}`);
 }
 
 export async function createEdge(

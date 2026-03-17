@@ -4,10 +4,16 @@ import type { CanvasNodeType } from './CanvasNode';
 interface NodeDetailPanelProps {
   node: CanvasNodeType | null;
   onUpdate: (id: string, patch: { title?: string; notes?: string }) => void;
+  onDelete: (id: string) => void;
   onClose: () => void;
 }
 
-export function NodeDetailPanel({ node, onUpdate, onClose }: NodeDetailPanelProps) {
+export function NodeDetailPanel({
+  node,
+  onUpdate,
+  onDelete,
+  onClose,
+}: NodeDetailPanelProps) {
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -77,33 +83,53 @@ export function NodeDetailPanel({ node, onUpdate, onClose }: NodeDetailPanelProp
   return (
     <div className="kc-panel">
       <div className="kc-panel__header">
-        <span className="kc-panel__label">Node Detail</span>
-        <button className="kc-panel__close" onClick={onClose}>
-          ✕
+        <span className="kc-panel__title">Node Detail</span>
+        <button
+          className="kc-panel__close"
+          onClick={onClose}
+          aria-label="Close panel"
+        >
+          &#x2715;
         </button>
       </div>
 
-      <label className="kc-panel__label" htmlFor="kc-panel-title">
-        Title
-      </label>
-      <input
-        id="kc-panel-title"
-        className="kc-panel__input"
-        value={title}
-        onChange={handleTitleChange}
-      />
+      <div className="kc-panel__body">
+        <div className="kc-panel__field">
+          <label className="kc-panel__label" htmlFor="kc-panel-title">
+            Title
+          </label>
+          <input
+            id="kc-panel-title"
+            className="kc-panel__input"
+            value={title}
+            onChange={handleTitleChange}
+            placeholder="Node title..."
+          />
+        </div>
 
-      <label className="kc-panel__label" htmlFor="kc-panel-notes">
-        Notes
-      </label>
-      <textarea
-        id="kc-panel-notes"
-        className="kc-panel__textarea"
-        value={notes}
-        onChange={handleNotesChange}
-        rows={12}
-        placeholder="Write notes here..."
-      />
+        <div className="kc-panel__field">
+          <label className="kc-panel__label" htmlFor="kc-panel-notes">
+            Notes
+          </label>
+          <textarea
+            id="kc-panel-notes"
+            className="kc-panel__textarea"
+            value={notes}
+            onChange={handleNotesChange}
+            rows={8}
+            placeholder="Write notes here..."
+          />
+        </div>
+      </div>
+
+      <div className="kc-panel__footer">
+        <button
+          className="kc-panel__delete-btn"
+          onClick={() => onDelete(node.id)}
+        >
+          Delete Node
+        </button>
+      </div>
     </div>
   );
 }
