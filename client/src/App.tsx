@@ -31,7 +31,7 @@ import type { CanvasNodeType } from './components/CanvasNode';
 import { Toolbar } from './components/Toolbar';
 import { NodeDetailPanel } from './components/NodeDetailPanel';
 import { EdgeDetailPanel } from './components/EdgeDetailPanel';
-import { ViewportController } from './components/ViewportController';
+import { ViewportController, VIEWPORT_KEY } from './components/ViewportController';
 import type { ViewportCommand } from './components/ViewportController';
 import {
   fetchNodes,
@@ -242,6 +242,9 @@ export default function App() {
   const [viewportCommand, setViewportCommand] = useState<ViewportCommand | null>(null);
   const viewportStackRef = useRef<Viewport[]>([]);
   const getViewportRef = useRef<(() => Viewport) | null>(null);
+  // Read once at mount so every re-render uses the same initial value.
+  // Avoids reading localStorage on every render (performance + correctness).
+  const initialFitViewRef = useRef(!localStorage.getItem(VIEWPORT_KEY));
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
   // Derive edge style from edges state (single source of truth) — no separate edgeStyleMap
@@ -429,7 +432,7 @@ export default function App() {
   const handleMoveEnd = useCallback((_: unknown, viewport: Viewport) => {
     if (viewportSaveTimer.current) clearTimeout(viewportSaveTimer.current);
     viewportSaveTimer.current = setTimeout(() => {
-      localStorage.setItem('kc-viewport', JSON.stringify(viewport));
+      localStorage.setItem(VIEWPORT_KEY, JSON.stringify(viewport));
     }, 600);
   }, []);
 
@@ -744,7 +747,7 @@ export default function App() {
         selectionMode={SelectionMode.Partial}
         multiSelectionKeyCode={['Meta', 'Control']}
         maxZoom={8}
-        fitView={!localStorage.getItem('kc-viewport')}
+        fitView={initialFitViewRef.current}
         fitViewOptions={{ padding: 0.2 }}
       >
         <Background variant={BackgroundVariant.Dots} gap={24} size={0.75}/>

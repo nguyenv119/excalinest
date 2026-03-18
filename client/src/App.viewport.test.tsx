@@ -38,6 +38,7 @@ const mockSetViewport = vi.fn();
 const mockGetViewport = vi.fn(() => ({ x: 10, y: 20, zoom: 1.5 }) as Viewport);
 const mockGetInternalNode = vi.fn();
 
+// REVIEW: mocking core dependency — test may not reflect real behavior
 vi.mock('@xyflow/react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@xyflow/react')>();
   return {
@@ -281,12 +282,10 @@ describe('App — ViewportController integration', () => {
       expect(mockFitBounds).toHaveBeenCalledOnce();
     }, { timeout: 500 });
 
-    const [bounds, options] = mockFitBounds.mock.calls[0] as [
-      { x: number; y: number; width: number; height: number },
-      { padding: number; duration: number }
-    ];
-    expect(bounds).toMatchObject({ x: 10, y: 20 });
-    expect(options.duration).toBe(400);
+    expect(mockFitBounds).toHaveBeenCalledWith(
+      expect.objectContaining({ x: 10, y: 20 }),
+      { padding: 0.15, duration: 400 }
+    );
   }, 10000);
 
   it('collapsing an expanded parent (after a prior expand) restores the saved viewport', async () => {
@@ -331,10 +330,10 @@ describe('App — ViewportController integration', () => {
     });
 
     // THEN setViewport is called with the saved viewport and animation duration
-    expect(mockSetViewport).toHaveBeenCalledOnce();
-    const [vp, opts] = mockSetViewport.mock.calls[0] as [Viewport, { duration: number }];
-    expect(vp).toEqual(savedViewport);
-    expect(opts.duration).toBe(350);
+    expect(mockSetViewport).toHaveBeenCalledWith(
+      savedViewport,
+      { duration: 350 }
+    );
   }, 15000);
 
   it('collapsing without a prior expand does not call setViewport (empty stack)', async () => {
@@ -383,11 +382,93 @@ describe('App — ViewportController integration', () => {
       expect(document.querySelector('.react-flow')).not.toBeNull();
     });
 
-    // THEN children are rendered (ViewportController is among them) but it
-    // produces no DOM node — only Toolbar and the edge-click-triggers div
-    // are rendered as App's non-null children.
-    // The presence of ViewportController is confirmed by the functional
-    // tests above (fitBounds / setViewport calls succeed).
-    expect(document.querySelector('.react-flow')).not.toBeNull();
+    // THEN no element with a ViewportController-specific data-testid exists —
+    // ViewportController returns null and adds no DOM nodes to the canvas.
+    expect(document.querySelector('[data-testid="viewport-controller"]')).toBeNull();
+  });
+
+  it('fitBounds is NOT called when getInternalNode returns null for the target node', async () => {
+    /**
+     * Verifies that when getInternalNode returns null (node not in layout yet),
+     * fitBounds is never called by ViewportController.
+     *
+     * Why: After expanding a parent the layout engine may not have positioned
+     * the node yet. Calling fitBounds with undefined coordinates produces a
+     * degenerate view. The component must guard against this case.
+     *
+     * What breaks: If fitBounds is called with null data, the canvas jumps to
+     * an invalid viewport (NaN coordinates) and the user must manually reset.
+     */
+    // GIVEN getInternalNode returns null (node not in layout)
+    mockGetInternalNode.mockReturnValue(null);
+
+    render(<App />);
+    const toggleCollapse = await waitForToggleCollapse('parent');
+
+    // Collapse first so we can expand
+    act(() => { toggleCollapse('parent'); });
+    mockFitBounds.mockClear();
+
+    // WHEN expand is triggered but getInternalNode has no layout data
+    act(() => { toggleCollapse('parent'); });
+
+    // THEN fitBounds is never called (guard prevents it)
+    await new Promise((r) => setTimeout(r, 100));
+    expect(mockFitBounds).not.toHaveBeenCalled();
+  }, 10000);
+
+  it('setViewport is called on mount when localStorage has a saved viewport', async () => {
+    /**
+     * Verifies that ViewportController restores the saved viewport from
+     * localStorage by calling setViewport immediately on mount.
+     *
+     * Why: This is the core "return to where you left off" contract. Without
+     * setViewport being called on mount with the saved data, the user always
+     * starts at the default fitView position regardless of their last session.
+     *
+     * What breaks: Users lose their viewport position on every page reload,
+     * making localStorage persistence functionally useless.
+     */
+    // GIVEN localStorage has a saved viewport
+    const savedViewport: Viewport = { x: 50, y: 75, zoom: 1.2 };
+    localStorage.setItem('kc-viewport', JSON.stringify(savedViewport));
+
+    // WHEN App mounts
+    render(<App />);
+
+    // THEN setViewport is called with the saved viewport (mount-restore path)
+    await waitFor(() => {
+      expect(mockSetViewport).toHaveBeenCalledWith(savedViewport);
+    });
+  });
+
+  it('no error is thrown when localStorage contains malformed JSON for kc-viewport', async () => {
+    /**
+     * Verifies that ViewportController silently ignores malformed JSON in
+     * localStorage rather than throwing an error that would crash the app.
+     *
+     * Why: A corrupted or truncated localStorage value (e.g. from a browser
+     * crash during the save) must not break the entire canvas. Silent failure
+     * is the correct behavior — fall back to fitView instead of crashing.
+     *
+     * What breaks: If JSON.parse throws uncaught, the ReactFlow canvas never
+     * renders and the user sees a blank or error screen.
+     */
+    // GIVEN localStorage has malformed JSON under the viewport key
+    localStorage.setItem('kc-viewport', 'not-valid-json{{{');
+
+    // WHEN App mounts
+    let caughtError: unknown = null;
+    try {
+      render(<App />);
+      await waitFor(() => {
+        expect(document.querySelector('.react-flow')).not.toBeNull();
+      });
+    } catch (e) {
+      caughtError = e;
+    }
+
+    // THEN no error is thrown — canvas renders normally
+    expect(caughtError).toBeNull();
   });
 });

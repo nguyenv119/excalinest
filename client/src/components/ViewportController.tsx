@@ -13,7 +13,7 @@ interface ViewportControllerProps {
   getViewportRef: MutableRefObject<(() => Viewport) | null>;
 }
 
-const VIEWPORT_KEY = 'kc-viewport';
+export const VIEWPORT_KEY = 'kc-viewport';
 
 export function ViewportController({ command, onCommandHandled, getViewportRef }: ViewportControllerProps) {
   const { fitBounds, setViewport, getViewport, getInternalNode } = useReactFlow();
@@ -39,11 +39,13 @@ export function ViewportController({ command, onCommandHandled, getViewportRef }
     if (!command) return;
 
     if (command.type === 'fitNode') {
+      const cmd = command; // capture before async setTimeout closure
+      onCommandHandled();
       setTimeout(() => {
         // Use getInternalNode to get positionAbsolute — the reliable absolute
         // canvas position for both root and subflow child nodes.
         // (node.position is relative to parent for extent:'parent' nodes)
-        const internal = getInternalNode(command.nodeId);
+        const internal = getInternalNode(cmd.nodeId);
         if (!internal) return;
         const abs = internal.internals.positionAbsolute;
         const x = abs?.x ?? internal.position.x;  // root nodes: position == absolute
@@ -52,6 +54,7 @@ export function ViewportController({ command, onCommandHandled, getViewportRef }
         const height = (internal.style?.height as number | undefined) ?? 240;
         fitBounds({ x, y, width, height }, { padding: 0.15, duration: 400 });
       }, 30); // one frame for layout after children become visible
+      return;
     }
 
     if (command.type === 'restoreViewport') {
