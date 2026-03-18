@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
-import { Handle, Position, NodeResizer, useConnection } from '@xyflow/react';
+import { Handle, Position, NodeResizer, useConnection, useViewport } from '@xyflow/react';
 import type { Node, NodeProps, ResizeDragEvent } from '@xyflow/react';
 import { patchNode } from '../api';
 import { borderWidthToCss, fontSizeToCss } from '../styleTokens';
@@ -46,6 +46,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
     fontSize,
   } = data;
   const connection = useConnection();
+  const { zoom } = useViewport();
 
   const borderWidthCss = borderWidthToCss(borderWidth);
   const nodeStyle: CSSProperties = {
@@ -55,11 +56,29 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
     ...(borderStyle ? { borderStyle } : {}),
   };
 
+  // Counter-scale the title on collapsed parent nodes so it remains legible at
+  // any zoom level — like city labels on a map.
+  // Numeric px values matching fontSizeToCss tokens (avoids parsing CSS strings).
+  const FONT_SIZE_PX: Record<string, number> = { small: 11, medium: 13.5, large: 18 };
+  const TARGET_PX = 13; // minimum legible screen-space pixels
+  const currentFontPx = FONT_SIZE_PX[fontSize ?? 'medium'] ?? 13.5;
+  const mapLabelScale =
+    collapsed && hasChildren
+      ? Math.max(1, Math.min(6, TARGET_PX / (currentFontPx * zoom)))
+      : 1;
+
   // fontColor and fontSize applied directly to title — CSS class colors override
   // a color set on a parent div.
   const titleStyle: CSSProperties = {
     ...(fontColor ? { color: fontColor } : {}),
     fontSize: fontSizeToCss(fontSize),
+    ...(mapLabelScale !== 1
+      ? {
+          transform: `scale(${mapLabelScale})`,
+          transformOrigin: 'left center',
+          display: 'inline-block', // transform requires block/inline-block
+        }
+      : {}),
   };
 
   const handleResizeEnd = useCallback(
@@ -90,7 +109,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
 
   return (
     <div
-      className={`kc-node${selected ? ' selected' : ''}${connection.inProgress ? ' show-handles' : ''}`}
+      className={`kc-node${selected ? ' selected' : ''}${connection.inProgress ? ' show-handles' : ''}${collapsed && hasChildren ? ' kc-node--collapsed' : ''}`}
       style={nodeStyle}
     >
       {/* Hide resizer on collapsed nodes — can't resize a compact title bar */}
