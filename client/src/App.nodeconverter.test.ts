@@ -322,4 +322,58 @@ describe('dbNodeToFlowNodeBase', () => {
     // THEN collapsed is true
     expect(result.data.collapsed).toBe(true);
   });
+
+  it('collapsed parent with DB dimensions uses COLLAPSED_HEIGHT (52) as initial style height', () => {
+    /**
+     * Verifies that a parent node with collapsed=1 and explicit DB dimensions
+     * (width/height) receives style.height = 52 (COLLAPSED_HEIGHT) on initial
+     * load, not the stored expanded height.
+     *
+     * Why: The compact-collapse feature renders collapsed parents as a minimal
+     * 52px title bar. This height must be applied at conversion time so the
+     * initial render shows the compacted state. The expanded dimensions are
+     * stored separately (in expandedStylesRef at the App level) for later
+     * restoration when the user expands the node.
+     *
+     * What breaks: Collapsed parents load at their full stored height (e.g.
+     * 240px) instead of the compact 52px title bar, making the canvas look
+     * unexpanded even though children are hidden.
+     */
+    // GIVEN a collapsed parent with explicit DB dimensions
+    const n = makeNode({ id: 'parent', collapsed: 1, width: 320, height: 240 });
+    const childMap = new Map([['parent', ['child1']]]);
+    const hiddenIds = new Set<string>();
+
+    // WHEN converted
+    const result = dbNodeToFlowNodeBase(n, childMap, hiddenIds);
+
+    // THEN style height is the compact 52px, not the stored 240px
+    expect(result.style).toEqual(expect.objectContaining({ height: 52 }));
+    expect((result.style as { height: number }).height).toBe(52);
+  });
+
+  it('collapsed parent without DB dimensions uses COLLAPSED_HEIGHT (52) over default height', () => {
+    /**
+     * Verifies that even a collapsed parent without stored DB dimensions
+     * (falls back to default 320x240) still gets height=52 as the initial
+     * style — the default height of 240 must not override COLLAPSED_HEIGHT.
+     *
+     * Why: If a parent was collapsed before its dimensions were saved to DB
+     * (e.g., first time toggled), it still needs to appear compact on reload.
+     * Using the default height instead would show the full-height card.
+     *
+     * What breaks: A collapsed parent that never had its dimensions persisted
+     * renders at the default 240px height instead of the compact 52px title bar.
+     */
+    // GIVEN a collapsed parent with no DB dimensions (defaults will be applied)
+    const n = makeNode({ id: 'parent', collapsed: 1, width: null, height: null });
+    const childMap = new Map([['parent', ['child1']]]);
+    const hiddenIds = new Set<string>();
+
+    // WHEN converted
+    const result = dbNodeToFlowNodeBase(n, childMap, hiddenIds);
+
+    // THEN style height is the compact 52, not the default 240
+    expect((result.style as { height: number }).height).toBe(52);
+  });
 });

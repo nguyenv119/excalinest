@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, waitFor, fireEvent } from '@testing-library/react';
+import { render, waitFor, fireEvent, act } from '@testing-library/react';
 import App from './App';
 import * as api from './api';
 import type { CanvasNodeData, CanvasEdge } from './api';
+import { dbNodeToFlowNodeBase } from './App';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -189,6 +190,197 @@ describe('App — collapse/expand behavior', () => {
     // THEN patchNode is called with collapsed: 1 for the parent node
     await waitFor(() => {
       expect(patchSpy).toHaveBeenCalledWith('parent', expect.objectContaining({ collapsed: 1 }));
+    });
+  });
+
+  it('collapsed parent node loads with compact height of 52px', async () => {
+    /**
+     * Verifies that a parent node with collapsed=1 in the DB is rendered
+     * with a style height of 52px (COLLAPSED_HEIGHT) on initial load.
+     *
+     * Why: The compact collapse feature shrinks collapsed parent nodes to a
+     * 52px title bar so the canvas is less cluttered. The height must be
+     * applied at load time (not just after toggling) so that reload correctly
+     * shows the compacted state that was saved.
+     *
+     * What breaks: After reloading, previously collapsed parents render at
+     * their full height (e.g. 240px), making the canvas look unexpectedly
+     * expanded even though the user had collapsed them.
+     */
+    // GIVEN a collapsed parent (collapsed=1) with known dimensions loaded from DB
+    const collapsedParentWithDims: CanvasNodeData = {
+      ...collapsedParentNode,
+      width: 320,
+      height: 240,
+    };
+    const child = { ...childOfCollapsedNode };
+    // REVIEW: mocking core dependency — test may not reflect real behavior
+    vi.spyOn(api, 'fetchNodes').mockResolvedValue([collapsedParentWithDims, child]);
+    vi.spyOn(api, 'fetchEdges').mockResolvedValue([]);
+
+    // WHEN App mounts and data loads
+    const { container } = render(<App />);
+    await waitFor(() => {
+      expect(container.querySelector('.react-flow')).not.toBeNull();
+    });
+
+    // THEN the collapsed parent wrapper has height 52px
+    await waitFor(() => {
+      const parentEl = container.querySelector('[data-id="collapsed-parent"]') as HTMLElement | null;
+      expect(parentEl).not.toBeNull();
+      expect(parentEl!.style.height).toBe('52px');
+    });
+  });
+
+  it('collapsing an expanded parent shrinks its height to 52px', async () => {
+    /**
+     * Verifies that clicking the collapse toggle on an expanded parent node
+     * changes its style height from the expanded value (240px) to 52px.
+     *
+     * Why: The compact collapse feature is the core differentiating UX of
+     * the canvas. Without the height shrink, collapsing a parent looks
+     * identical to the expanded state (children simply disappear but the
+     * card keeps its full size), which is confusing.
+     *
+     * What breaks: Collapsing a parent hides child nodes but the parent
+     * card remains at its full 240px height, wasting canvas space and not
+     * signaling that the subtree is hidden.
+     */
+    // GIVEN a parent node with known dimensions and one child (expanded)
+    const expandedParent: CanvasNodeData = {
+      ...parentNode,
+      width: 320,
+      height: 240,
+    };
+    // REVIEW: mocking core dependency — test may not reflect real behavior
+    vi.spyOn(api, 'fetchNodes').mockResolvedValue([expandedParent, childNode]);
+    vi.spyOn(api, 'fetchEdges').mockResolvedValue([]);
+
+    // WHEN App mounts, parent is expanded, then collapse toggle is clicked
+    const { container } = render(<App />);
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="collapse-toggle"]')).not.toBeNull();
+    });
+    fireEvent.click(container.querySelector('[data-testid="collapse-toggle"]')!);
+
+    // THEN the parent wrapper shrinks to 52px
+    await waitFor(() => {
+      const parentEl = container.querySelector('[data-id="parent"]') as HTMLElement | null;
+      expect(parentEl).not.toBeNull();
+      expect(parentEl!.style.height).toBe('52px');
+    });
+  });
+
+  it('expanding a collapsed parent restores its saved height', async () => {
+    /**
+     * Verifies that clicking the collapse toggle on a collapsed parent node
+     * (collapsed=1 from DB) restores the node height to the saved expanded
+     * height (stored in expandedStylesRef).
+     *
+     * Why: Expand must undo the compact-collapse shrink exactly. If the
+     * saved height is not restored, the node expands to a wrong size
+     * (e.g. still 52px or defaults to 0), making children invisible or
+     * the layout broken.
+     *
+     * What breaks: After expanding a collapsed parent, the node remains
+     * at 52px or snaps to an incorrect height, so children overflow the
+     * parent or are invisible.
+     */
+    // GIVEN a collapsed parent (collapsed=1) with saved DB dimensions
+    const collapsedParentWithDims: CanvasNodeData = {
+      ...collapsedParentNode,
+      width: 320,
+      height: 240,
+    };
+    const child = { ...childOfCollapsedNode };
+    // REVIEW: mocking core dependency — test may not reflect real behavior
+    vi.spyOn(api, 'fetchNodes').mockResolvedValue([collapsedParentWithDims, child]);
+    vi.spyOn(api, 'fetchEdges').mockResolvedValue([]);
+
+    // WHEN App mounts, parent is collapsed (52px), then expand toggle is clicked
+    const { container } = render(<App />);
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="collapse-toggle"]')).not.toBeNull();
+    });
+    fireEvent.click(container.querySelector('[data-testid="collapse-toggle"]')!);
+
+    // THEN the parent wrapper restores to the saved expanded height of 240px
+    await waitFor(() => {
+      const parentEl = container.querySelector('[data-id="collapsed-parent"]') as HTMLElement | null;
+      expect(parentEl).not.toBeNull();
+      expect(parentEl!.style.height).toBe('240px');
+    });
+  });
+
+  it('collapse then expand restores the resized height when node was resized before collapsing', async () => {
+    /**
+     * Verifies that collapsing then expanding a parent after a programmatic
+     * resize restores the resized dimensions, not the original DB dimensions.
+     *
+     * Why: The collapse action captures the current node style (including any
+     * post-resize dimensions) in expandedStylesRef. Expand must read from there
+     * to restore the post-resize height. If it reads from DB dimensions or
+     * ignores the ref, the user loses their resized layout every time they
+     * collapse and expand.
+     *
+     * What breaks: After resizing a parent, collapsing and expanding it resets
+     * the node to its original DB height instead of the resized height the user
+     * set.
+     */
+    // GIVEN a parent node with initial DB dimensions (320x240) and one child
+    const expandedParent: CanvasNodeData = {
+      ...parentNode,
+      width: 320,
+      height: 240,
+    };
+    // REVIEW: mocking core dependency — test may not reflect real behavior
+    vi.spyOn(api, 'fetchNodes').mockResolvedValue([expandedParent, childNode]);
+    vi.spyOn(api, 'fetchEdges').mockResolvedValue([]);
+
+    // WHEN App mounts, we simulate a resize to 500x400 by calling onNodeResized
+    // (which is the callback CanvasNode calls after NodeResizer drag ends),
+    // then collapse, then expand
+    const { container } = render(<App />);
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="collapse-toggle"]')).not.toBeNull();
+    });
+
+    // Simulate a resize by calling onNodeResized through the React fiber
+    // to update both expandedStylesRef and node style before collapsing
+    await act(async () => {
+      const nodeEl = container.querySelector('[data-id="parent"]');
+      expect(nodeEl).not.toBeNull();
+      // Walk the React fiber to find the onNodeResized callback in node data
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const fiberKey = Object.keys(nodeEl!).find((k) => k.startsWith('__reactFiber'));
+      if (fiberKey) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let fiber = (nodeEl as any)[fiberKey];
+        while (fiber) {
+          if (fiber.memoizedProps?.data?.onNodeResized) {
+            fiber.memoizedProps.data.onNodeResized('parent', 500, 400);
+            break;
+          }
+          fiber = fiber.child ?? fiber.return;
+        }
+      }
+    });
+
+    // Collapse the parent — this records the resized 500x400 into expandedStylesRef
+    fireEvent.click(container.querySelector('[data-testid="collapse-toggle"]')!);
+    await waitFor(() => {
+      const parentEl = container.querySelector('[data-id="parent"]') as HTMLElement | null;
+      expect(parentEl!.style.height).toBe('52px');
+    });
+
+    // Expand the parent — should restore to the resized 400px, not original 240px
+    fireEvent.click(container.querySelector('[data-testid="collapse-toggle"]')!);
+
+    // THEN the parent restores to the resized height of 400px
+    await waitFor(() => {
+      const parentEl = container.querySelector('[data-id="parent"]') as HTMLElement | null;
+      expect(parentEl).not.toBeNull();
+      expect(parentEl!.style.height).toBe('400px');
     });
   });
 

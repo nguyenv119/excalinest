@@ -3,6 +3,7 @@ import {
   borderWidthToCss,
   strokeWidthToCss,
   strokeStyleToDasharray,
+  fontSizeToCss,
 } from './styleTokens';
 
 // ─── borderWidthToCss ─────────────────────────────────────────────────────────
@@ -240,5 +241,88 @@ describe('strokeStyleToDasharray', () => {
     const result = strokeStyleToDasharray(null);
     // THEN it returns undefined
     expect(result).toBeUndefined();
+  });
+});
+
+// ─── fontSizeToCss ────────────────────────────────────────────────────────────
+
+describe('fontSizeToCss', () => {
+  it('null_token_returns_default_13_5px', () => {
+    /**
+     * Verifies that a null token (no font_size set) returns the default
+     * CSS value '13.5px'.
+     *
+     * Why: When no font_size is stored in the DB, the node title should
+     * render at the default size. Unlike borderWidthToCss, fontSizeToCss
+     * always returns a string because fontSize must always be set on the
+     * title element (no "omit the property" fallback).
+     *
+     * What breaks: If null returns undefined, spreading into a CSSProperties
+     * object leaves fontSize undefined and the title inherits an arbitrary
+     * font size from the cascade rather than the intended default.
+     */
+    // GIVEN no font_size stored in DB (null token)
+    // WHEN translated to CSS
+    const result = fontSizeToCss(null);
+    // THEN it returns the default pixel value
+    expect(result).toBe('13.5px');
+  });
+
+  it('small_token_maps_to_11px', () => {
+    /**
+     * Verifies that the 'small' token maps to the CSS pixel value '11px'.
+     *
+     * Why: The S/M/L font size control stores semantic tokens in the DB.
+     * The token must be translated to a concrete CSS value before it is
+     * applied as an inline style on the node title. Without the mapping,
+     * 'small' is passed directly as fontSize, which the browser ignores.
+     *
+     * What breaks: Nodes with font_size='small' display at the default
+     * font size — the user's size selection has no visible effect.
+     */
+    // GIVEN the 'small' token
+    // WHEN translated to CSS
+    const result = fontSizeToCss('small');
+    // THEN it returns the small CSS pixel value
+    expect(result).toBe('11px');
+  });
+
+  it('medium_token_maps_to_default_13_5px', () => {
+    /**
+     * Verifies that the 'medium' token maps to '13.5px' (same as the
+     * null/default case).
+     *
+     * Why: 'medium' is the mid-point of the S/M/L scale and is the same
+     * size as the unstyled default. This ensures that choosing 'medium'
+     * explicitly is visually identical to having no font_size set, which
+     * is the expected UX behavior.
+     *
+     * What breaks: If 'medium' maps to a different value than null, then
+     * a node styled with 'medium' and a node with no font_size look
+     * different — confusing the user about what the default actually is.
+     */
+    // GIVEN the 'medium' token
+    // WHEN translated to CSS
+    const result = fontSizeToCss('medium');
+    // THEN it returns the same default as null
+    expect(result).toBe('13.5px');
+  });
+
+  it('large_token_maps_to_18px', () => {
+    /**
+     * Verifies that the 'large' token maps to the CSS pixel value '18px'.
+     *
+     * Why: Completes the three-step S/M/L scale. The large option must
+     * produce a clearly larger font size than medium so the user's
+     * selection has a visible effect on the canvas node title.
+     *
+     * What breaks: Nodes with font_size='large' display at the same size
+     * as medium — the large option has no visible effect.
+     */
+    // GIVEN the 'large' token
+    // WHEN translated to CSS
+    const result = fontSizeToCss('large');
+    // THEN it returns the large CSS pixel value
+    expect(result).toBe('18px');
   });
 });
