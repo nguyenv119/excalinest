@@ -112,6 +112,7 @@ describe('STROKE_WIDTHS', () => {
     // GIVEN the exported constant
     const ids = STROKE_WIDTHS.map((w) => w.id);
 
+    // WHEN we inspect the array
     // THEN ids are exactly the three canonical tokens
     expect(ids).toEqual(['thin', 'medium', 'thick']);
   });
@@ -155,6 +156,7 @@ describe('STROKE_STYLES', () => {
     // GIVEN the exported constant
     const ids = STROKE_STYLES.map((s) => s.id);
 
+    // WHEN we inspect the array
     // THEN ids are exactly the three canonical tokens
     expect(ids).toEqual(['solid', 'dashed', 'dotted']);
   });
@@ -164,7 +166,10 @@ describe('STROKE_STYLES', () => {
      * Verifies the structural shape of every STROKE_STYLES entry.
      *
      * Why: Same structural requirement as STROKE_WIDTHS — panel components
-     * rely on id, label, and title to render toggle buttons correctly.
+     * rely on id, label, and title to render toggle buttons correctly. For
+     * STROKE_STYLES specifically, the `id` is passed directly as a CSS
+     * `borderStyle` value on CanvasNode, so a misspelling like 'doted' would
+     * silently produce no visual effect (the browser ignores invalid values).
      *
      * What breaks: Toggle buttons render without text or tooltip, degrading
      * usability of the style panel.
@@ -179,24 +184,4 @@ describe('STROKE_STYLES', () => {
     }
   });
 
-  it('token ids match valid CSS borderStyle values', () => {
-    /**
-     * Verifies that every STROKE_STYLES id is a valid CSS borderStyle value.
-     *
-     * Why: CanvasNode passes the stored token directly to the borderStyle CSS
-     * property. If a token is not a valid CSS borderStyle, the browser silently
-     * ignores it and renders the default, making the style appear not to save.
-     *
-     * What breaks: Nodes with non-CSS-valid tokens always render with solid
-     * borders regardless of what was stored.
-     */
-    // GIVEN the canonical CSS border-style values we support
-    const validCSSValues = new Set(['solid', 'dashed', 'dotted']);
-
-    // WHEN we check each entry's id
-    // THEN it must be a valid CSS value
-    for (const entry of STROKE_STYLES) {
-      expect(validCSSValues.has(entry.id)).toBe(true);
-    }
-  });
 });
