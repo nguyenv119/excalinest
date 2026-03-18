@@ -150,23 +150,23 @@ export function NodeDetailPanel({
   const handleBorderWidth = (width: string) => {
     if (!node) return;
     // Toggle off if clicking the active value
-    const next = node.data.border_width === width ? null : width;
+    const next = node.data.borderWidth === width ? null : width;
     onUpdate(node.id, { border_width: next });
   };
 
   const handleBorderStyle = (style: string) => {
     if (!node) return;
-    const next = node.data.border_style === style ? null : style;
+    const next = node.data.borderStyle === style ? null : style;
     onUpdate(node.id, { border_style: next });
   };
 
   if (!node) return null;
 
-  const activeStroke = node.data.border_color;
-  const activeBg = node.data.bg_color;
-  const activeFontColor = node.data.font_color;
-  const activeWidth = node.data.border_width;
-  const activeStyle = node.data.border_style;
+  const activeStroke = node.data.borderColor;
+  const activeBg = node.data.bgColor;
+  const activeFontColor = node.data.fontColor;
+  const activeWidth = node.data.borderWidth;
+  const activeStyle = node.data.borderStyle;
 
   return (
     <div className="kc-panel">

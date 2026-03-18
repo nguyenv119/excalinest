@@ -12,8 +12,8 @@ export interface CanvasNodeData {
   collapsed: 0 | 1;
   border_color: string | null;
   bg_color: string | null;
-  border_width: string | null;
-  border_style: string | null;
+  border_width: string | null;  // 'thin' | 'medium' | 'thick' | null
+  border_style: string | null;  // 'solid' | 'dashed' | 'dotted' | null
   font_size: string | null;
   font_color: string | null;
   created_at: string;
@@ -28,8 +28,8 @@ export interface CanvasEdge {
   target_handle: string | null;
   label: string | null;
   stroke_color: string | null;
-  stroke_width: string | null;
-  stroke_style: string | null;
+  stroke_width: string | null;  // 'thin' | 'medium' | 'thick' | null
+  stroke_style: string | null;  // 'solid' | 'dashed' | 'dotted' | null
   created_at: string;
 }
 

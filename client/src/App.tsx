@@ -115,6 +115,23 @@ function applyEdgeStylePatch(
 // reference on every render, triggering infinite re-renders.
 const nodeTypes = { canvasNode: CanvasNode };
 
+// ─── Style token helpers ─────────────────────────────────────────────────────
+
+/** Map semantic stroke-width tokens to CSS stroke-width values. */
+function strokeWidthToCss(token: string | null): string | undefined {
+  if (token === 'thin') return '1';
+  if (token === 'medium') return '2';
+  if (token === 'thick') return '3';
+  return undefined;
+}
+
+/** Map border/stroke style tokens to SVG strokeDasharray values. */
+function strokeStyleToDasharray(token: string | null): string | undefined {
+  if (token === 'dashed') return '5,5';
+  if (token === 'dotted') return '2,3';
+  return undefined;
+}
+
 // ─── Converters ──────────────────────────────────────────────────────────────
 
 /**
@@ -161,11 +178,12 @@ function dbNodeToFlowNode(
       onToggleCollapse,
       onAddChild,
       onNodeResized,
-      border_color: n.border_color,
-      bg_color: n.bg_color,
-      border_width: n.border_width,
-      border_style: n.border_style,
-      font_color: n.font_color,
+      // Visual style tokens — passed to CanvasNode for inline CSS application
+      borderColor: n.border_color,
+      bgColor: n.bg_color,
+      borderWidth: n.border_width,
+      borderStyle: n.border_style,
+      fontColor: n.font_color,
     },
     ...(n.parent_id
       ? { parentId: n.parent_id, extent: 'parent' as const }
@@ -507,6 +525,8 @@ export default function App() {
   handleNodeCreatedRef.current = handleNodeCreated;
 
   // ─── Node update (from panel) ──────────────────────────────────────────────
+  // NodeDetailPanel sends DB-level snake_case fields; CanvasNodeType data uses
+  // camelCase. Map them here before the optimistic state update.
   const handleNodeUpdate = useCallback(
     (id: string, patch: {
       title?: string;
@@ -517,13 +537,22 @@ export default function App() {
       border_style?: string | null;
       font_color?: string | null;
     }) => {
-      // Optimistic local update
+      // Build a camelCase patch for the React state optimistic update
+      const statePatch: Partial<CanvasNodeType['data']> = {};
+      if (patch.title !== undefined) statePatch.title = patch.title;
+      if (patch.notes !== undefined) statePatch.notes = patch.notes;
+      if ('border_color' in patch) statePatch.borderColor = patch.border_color ?? null;
+      if ('bg_color' in patch) statePatch.bgColor = patch.bg_color ?? null;
+      if ('border_width' in patch) statePatch.borderWidth = patch.border_width ?? null;
+      if ('border_style' in patch) statePatch.borderStyle = patch.border_style ?? null;
+      if ('font_color' in patch) statePatch.fontColor = patch.font_color ?? null;
+
       setNodes((nds) =>
         nds.map((n) =>
-          n.id === id ? { ...n, data: { ...n.data, ...patch } } : n
+          n.id === id ? { ...n, data: { ...n.data, ...statePatch } } : n
         )
       );
-      // Fire-and-forget persist
+      // Fire-and-forget persist (DB uses snake_case — send patch as-is)
       patchNode(id, patch).catch((err) =>
         console.error('Failed to persist node update:', err)
       );

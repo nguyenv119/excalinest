@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type React from 'react';
+import type { CSSProperties, MouseEvent } from 'react';
 import { Handle, Position, NodeResizer, useConnection } from '@xyflow/react';
 import type { Node, NodeProps, ResizeDragEvent } from '@xyflow/react';
 import { patchNode } from '../api';
@@ -15,12 +15,12 @@ export type CanvasNodeType = Node<
     onToggleCollapse: (id: string) => void;
     onAddChild: (id: string) => void;
     onNodeResized: (id: string, width: number, height: number) => void;
-    // Style fields — mirror DB columns; null = use default
-    border_color: string | null;
-    bg_color: string | null;
-    border_width: string | null;
-    border_style: string | null;
-    font_color: string | null;
+    // Visual style tokens from DB
+    borderColor: string | null;
+    bgColor: string | null;
+    borderWidth: string | null;  // 'thin' | 'medium' | 'thick' | null
+    borderStyle: string | null;  // 'solid' | 'dashed' | 'dotted' | null
+    fontColor: string | null;
   },
   'canvasNode'
 >;
@@ -28,23 +28,42 @@ export type CanvasNodeType = Node<
 // ─── Component ───────────────────────────────────────────────────────────────
 // NOTE: nodeTypes must be defined OUTSIDE the component in App.tsx —
 // inline definition causes infinite re-renders.
+/** Map semantic border-width tokens to CSS pixel values. */
+function borderWidthToCss(token: string | null): string | undefined {
+  if (token === 'thin') return '1px';
+  if (token === 'medium') return '2px';
+  if (token === 'thick') return '3px';
+  return undefined;
+}
+
 export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
-  const { title, notes, hasChildren, collapsed, onToggleCollapse, onAddChild, onNodeResized,
-    border_color, bg_color, border_width, border_style, font_color } = data;
+  const {
+    title,
+    notes,
+    hasChildren,
+    collapsed,
+    onToggleCollapse,
+    onAddChild,
+    onNodeResized,
+    borderColor,
+    bgColor,
+    borderWidth,
+    borderStyle,
+    fontColor,
+  } = data;
   const connection = useConnection();
 
-  // Build inline style overrides from style data fields
-  // bg_color can be 'transparent' (explicit see-through) or a hex color; null = no override
-  const cardStyle: React.CSSProperties = {};
-  if (bg_color !== null) cardStyle.background = bg_color;
-  if (border_color) cardStyle.borderColor = border_color;
-  if (border_width) {
-    const widthMap: Record<string, string> = { thin: '1px', medium: '2px', thick: '3.5px' };
-    cardStyle.borderWidth = widthMap[border_width] ?? border_width;
-  }
-  if (border_style) {
-    cardStyle.borderStyle = border_style;
-  }
+  const borderWidthCss = borderWidthToCss(borderWidth);
+  const nodeStyle: CSSProperties = {
+    ...(borderColor ? { borderColor } : {}),
+    ...(bgColor ? { backgroundColor: bgColor } : {}),
+    ...(borderWidthCss ? { borderWidth: borderWidthCss } : {}),
+    ...(borderStyle ? { borderStyle } : {}),
+  };
+
+  // fontColor must be applied directly to title/notes — CSS class colors on
+  // those elements override a color set on a parent div.
+  const fontStyle: CSSProperties | undefined = fontColor ? { color: fontColor } : undefined;
 
   const handleResizeEnd = useCallback(
     (_event: ResizeDragEvent, params: { x: number; y: number; width: number; height: number }) => {
@@ -57,7 +76,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
   );
 
   const handleCollapseClick = useCallback(
-    (e: React.MouseEvent) => {
+    (e: MouseEvent) => {
       e.stopPropagation(); // don't trigger node selection
       onToggleCollapse(id);
     },
@@ -65,19 +84,17 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
   );
 
   const handleAddChildClick = useCallback(
-    (e: React.MouseEvent) => {
+    (e: MouseEvent) => {
       e.stopPropagation(); // don't trigger node selection
       onAddChild(id);
     },
     [id, onAddChild]
   );
 
-  const isTransparent = bg_color === 'transparent';
-
   return (
     <div
-      className={`kc-node${selected ? ' selected' : ''}${connection.inProgress ? ' show-handles' : ''}${isTransparent ? ' kc-node--transparent' : ''}`}
-      style={cardStyle}
+      className={`kc-node${selected ? ' selected' : ''}${connection.inProgress ? ' show-handles' : ''}`}
+      style={nodeStyle}
     >
       <NodeResizer
         minWidth={150}
@@ -95,9 +112,9 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
       <Handle type="target" position={Position.Right} id="right-target" />
       <Handle type="source" position={Position.Right} id="right-source" />
 
-      <div className="kc-node__inner" style={{ color: font_color ?? 'inherit' }}>
+      <div className="kc-node__inner">
         <div className="kc-node__header">
-          <p className="kc-node__title">{title}</p>
+          <p className="kc-node__title" style={fontStyle}>{title}</p>
           <div className="kc-node__header-actions">
             <button
               data-testid="add-child-btn"
@@ -120,7 +137,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
           </div>
         </div>
         {notes ? (
-          <p className="kc-node__notes">{notes}</p>
+          <p className="kc-node__notes" style={fontStyle}>{notes}</p>
         ) : (
           <p className="kc-node__notes kc-node__notes--empty">no notes</p>
         )}
