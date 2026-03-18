@@ -252,6 +252,119 @@ describe('App — node styling fields', () => {
   });
 });
 
+// ─── Tests: KC-2 canvas node rendering ───────────────────────────────────────
+
+describe('App — KC-2 canvas node rendering', () => {
+  beforeEach(() => {
+    // REVIEW: mocking core dependency — test may not reflect real behavior
+    vi.spyOn(api, 'fetchEdges').mockResolvedValue(noEdges);
+    vi.spyOn(api, 'patchNode').mockResolvedValue(baseNode);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('canvas node renders no notes text element', async () => {
+    /**
+     * Verifies that the .kc-node__notes element is NOT rendered inside a
+     * canvas node.
+     *
+     * Why: KC-2 removes the truncated notes preview from canvas nodes so
+     * the card is visually clean and the notes content is only visible in
+     * the detail panel. If the notes element is still rendered, the canvas
+     * becomes cluttered and the KC-2 requirement is violated.
+     *
+     * What breaks: Canvas nodes continue to show a truncated preview of
+     * notes, making the cards harder to read at a glance and defeating the
+     * KC-2 "clean canvas" goal.
+     */
+    // GIVEN a node with non-empty notes
+    const nodeWithNotes: CanvasNodeData = { ...baseNode, notes: 'Some notes here' };
+    // REVIEW: mocking core dependency — test may not reflect real behavior
+    vi.spyOn(api, 'fetchNodes').mockResolvedValue([nodeWithNotes]);
+
+    // WHEN App mounts and data loads
+    const { container } = render(<App />);
+    await waitFor(() => {
+      expect(container.querySelector('.react-flow')).not.toBeNull();
+    });
+    await waitFor(() => {
+      expect(container.querySelector('.kc-node')).not.toBeNull();
+    });
+
+    // THEN no notes text element is present on the canvas node
+    const notesEl = container.querySelector('.kc-node__notes');
+    expect(notesEl).toBeNull();
+  });
+
+  it('node with font_size small renders title with font-size 11px', async () => {
+    /**
+     * Verifies that a node loaded from DB with font_size='small' has an
+     * inline font-size of '11px' on its title element.
+     *
+     * Why: The KC-2 font size feature stores semantic tokens ('small',
+     * 'medium', 'large') in the DB and translates them via fontSizeToCss
+     * to inline styles on the .kc-node__title element. If the mapping is
+     * not applied to the title, the S/M/L size control has no visible
+     * effect on the canvas after a page reload.
+     *
+     * What breaks: After setting font size to Small and reloading, the
+     * node title renders at the default 13.5px instead of 11px — the
+     * user's size preference is lost on reload.
+     */
+    // GIVEN a node stored with font_size 'small'
+    const smallFontNode: CanvasNodeData = { ...baseNode, id: 'n-small', font_size: 'small' };
+    // REVIEW: mocking core dependency — test may not reflect real behavior
+    vi.spyOn(api, 'fetchNodes').mockResolvedValue([smallFontNode]);
+
+    // WHEN App mounts and data loads
+    const { container } = render(<App />);
+    await waitFor(() => {
+      expect(container.querySelector('.react-flow')).not.toBeNull();
+    });
+
+    // THEN the .kc-node__title element has font-size 11px
+    await waitFor(() => {
+      const titleEl = container.querySelector('.kc-node__title') as HTMLElement | null;
+      expect(titleEl).not.toBeNull();
+      expect(titleEl!.style.fontSize).toBe('11px');
+    });
+  });
+
+  it('node with font_size large renders title with font-size 18px', async () => {
+    /**
+     * Verifies that a node loaded from DB with font_size='large' has an
+     * inline font-size of '18px' on its title element.
+     *
+     * Why: Same token-to-CSS mapping contract as 'small'. Each font size
+     * option must produce a visually distinct and correct CSS value so
+     * the S/M/L control has a meaningful, persistent effect.
+     *
+     * What breaks: After setting font size to Large and reloading, the
+     * node title renders at the default 13.5px — the large size choice
+     * is not persisted visually.
+     */
+    // GIVEN a node stored with font_size 'large'
+    const largeFontNode: CanvasNodeData = { ...baseNode, id: 'n-large', font_size: 'large' };
+    // REVIEW: mocking core dependency — test may not reflect real behavior
+    vi.spyOn(api, 'fetchNodes').mockResolvedValue([largeFontNode]);
+
+    // WHEN App mounts and data loads
+    const { container } = render(<App />);
+    await waitFor(() => {
+      expect(container.querySelector('.react-flow')).not.toBeNull();
+    });
+
+    // THEN the .kc-node__title element has font-size 18px
+    await waitFor(() => {
+      const titleEl = container.querySelector('.kc-node__title') as HTMLElement | null;
+      expect(titleEl).not.toBeNull();
+      expect(titleEl!.style.fontSize).toBe('18px');
+    });
+  });
+});
+
 // Note: Edge styling render tests are in App.edgestyles.test.tsx.
 // They require mocking @xyflow/react at the module level (vi.mock hoisting),
 // which would interfere with the node styling tests above (those rely on
