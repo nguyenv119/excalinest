@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, MouseEvent } from 'react';
 import { Handle, Position, NodeResizer, useConnection } from '@xyflow/react';
 import type { Node, NodeProps, ResizeDragEvent } from '@xyflow/react';
 import { patchNode } from '../api';
@@ -20,6 +20,7 @@ export type CanvasNodeType = Node<
     bgColor: string | null;
     borderWidth: string | null;  // 'thin' | 'medium' | 'thick' | null
     borderStyle: string | null;  // 'solid' | 'dashed' | 'dotted' | null
+    fontColor: string | null;
   },
   'canvasNode'
 >;
@@ -48,6 +49,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
     bgColor,
     borderWidth,
     borderStyle,
+    fontColor,
   } = data;
   const connection = useConnection();
 
@@ -58,6 +60,10 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
     ...(borderWidthCss ? { borderWidth: borderWidthCss } : {}),
     ...(borderStyle ? { borderStyle } : {}),
   };
+
+  // fontColor must be applied directly to title/notes — CSS class colors on
+  // those elements override a color set on a parent div.
+  const fontStyle: CSSProperties | undefined = fontColor ? { color: fontColor } : undefined;
 
   const handleResizeEnd = useCallback(
     (_event: ResizeDragEvent, params: { x: number; y: number; width: number; height: number }) => {
@@ -70,7 +76,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
   );
 
   const handleCollapseClick = useCallback(
-    (e: React.MouseEvent) => {
+    (e: MouseEvent) => {
       e.stopPropagation(); // don't trigger node selection
       onToggleCollapse(id);
     },
@@ -78,7 +84,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
   );
 
   const handleAddChildClick = useCallback(
-    (e: React.MouseEvent) => {
+    (e: MouseEvent) => {
       e.stopPropagation(); // don't trigger node selection
       onAddChild(id);
     },
@@ -108,7 +114,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
 
       <div className="kc-node__inner">
         <div className="kc-node__header">
-          <p className="kc-node__title">{title}</p>
+          <p className="kc-node__title" style={fontStyle}>{title}</p>
           <div className="kc-node__header-actions">
             <button
               data-testid="add-child-btn"
@@ -131,7 +137,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
           </div>
         </div>
         {notes ? (
-          <p className="kc-node__notes">{notes}</p>
+          <p className="kc-node__notes" style={fontStyle}>{notes}</p>
         ) : (
           <p className="kc-node__notes kc-node__notes--empty">no notes</p>
         )}

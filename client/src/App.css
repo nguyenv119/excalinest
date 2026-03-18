@@ -4,7 +4,6 @@
 
 :root {
   --canvas-bg: #292929;
-  --canvas-dot: rgba(255, 255, 255, 0.035);
   --card-bg: #f3f1ec;
   --card-border: #dedad2;
   --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.06);
@@ -41,11 +40,6 @@ body,
 
 .react-flow__background {
   background: var(--canvas-bg);
-}
-
-.react-flow__background pattern circle,
-.react-flow__background pattern rect {
-  fill: var(--canvas-dot);
 }
 
 /* ─── Controls & MiniMap ────────────────────────────────────────────────── */
@@ -139,6 +133,47 @@ body,
 
 .kc-node.selected {
   border-color: var(--accent);
+}
+
+/* ─── Transparent node — anchored to dark canvas ──────────────────────────── */
+/* When a node has explicit transparent fill it needs visual anchoring:        */
+/* white border + light text so it remains legible on the dark canvas.        */
+
+.kc-node--transparent {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(255, 255, 255, 0.38) !important;
+}
+
+.kc-node--transparent:hover {
+  border-color: rgba(255, 255, 255, 0.56) !important;
+}
+
+.kc-node--transparent.selected {
+  border-color: var(--accent) !important;
+}
+
+.kc-node--transparent .kc-node__title {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.kc-node--transparent .kc-node__notes {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.kc-node--transparent .kc-node__notes--empty {
+  color: rgba(255, 255, 255, 0.25);
+  opacity: 1; /* override the default 0.4 that stacks with a dimmer base */
+}
+
+/* Collapse / add-child buttons: lighten on transparent bg */
+.kc-node--transparent .kc-node__collapse-btn,
+.kc-node--transparent .kc-node__add-child-btn {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* Handle fill adapts — use canvas-bg so the ring reads as a gap */
+.kc-node--transparent .react-flow__handle {
+  background: var(--canvas-bg);
 }
 
 .kc-node__inner {
@@ -651,4 +686,185 @@ body,
 
 .kc-panel__delete-btn:active {
   background: rgba(196, 85, 80, 0.08);
+}
+
+/* Extra breathing room above the Style section — separates it visually from Notes */
+.kc-panel__field + .kc-panel__field:last-child {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--ui-border);
+}
+
+/* ─── Style Row (label + swatch/toggle group) ──────────────────────────── */
+
+.kc-style-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.kc-style-row:last-child {
+  margin-bottom: 0;
+}
+
+.kc-style-row__label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--ui-text-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  min-width: 36px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+/* ─── Color Swatches ─────────────────────────────────────────────────────── */
+
+.kc-style-swatches {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.kc-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s, box-shadow 0.1s;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.kc-swatch:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
+}
+
+/* Active: tight 1px gap + 2px ring — no scale so the ring stays within its lane */
+.kc-swatch--active {
+  box-shadow: 0 0 0 1.5px var(--canvas-bg), 0 0 0 3px rgba(255, 255, 255, 0.72);
+}
+
+.kc-swatch--active:hover {
+  box-shadow: 0 0 0 1.5px var(--canvas-bg), 0 0 0 3px rgba(255, 255, 255, 0.9);
+  transform: scale(1.08);
+}
+
+/* "None" stroke swatch — diagonal strikethrough line */
+[data-testid="stroke-swatches"] .kc-swatch:first-child::before,
+[data-testid="edge-stroke-swatches"] .kc-swatch:first-child::before {
+  content: '';
+  position: absolute;
+  width: 130%;
+  height: 1.5px;
+  background: rgba(255, 255, 255, 0.4);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+/* "Transparent" fill swatch — checkerboard pattern */
+[data-testid="bg-swatches"] .kc-swatch:first-child {
+  background: repeating-conic-gradient(
+    rgba(255, 255, 255, 0.18) 0% 25%,
+    rgba(255, 255, 255, 0.04) 0% 50%
+  ) 0 0 / 7px 7px !important;
+}
+
+/* ─── Font Color Swatches ──────────────────────────────────────────────────── */
+/* "A" letter swatches — slightly taller to read well, border-radius for pill look */
+
+.kc-swatch--font {
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+/* ─── Style Toggle Buttons ───────────────────────────────────────────────── */
+
+.kc-style-toggles {
+  display: flex;
+  gap: 3px;
+}
+
+.kc-style-toggle {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  color: var(--ui-text-dim);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  padding: 4px 9px;
+  cursor: pointer;
+  transition: color 0.1s, background 0.1s, border-color 0.1s;
+  line-height: 1;
+  min-width: 34px;
+  text-align: center;
+  user-select: none;
+}
+
+.kc-style-toggle:hover {
+  color: var(--ui-text);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.kc-style-toggle--active {
+  color: var(--accent);
+  background: rgba(208, 122, 90, 0.1);
+  border-color: rgba(208, 122, 90, 0.3);
+}
+
+.kc-style-toggle--active:hover {
+  background: rgba(208, 122, 90, 0.14);
+}
+
+/* ─── WIDTH toggle visual weight ────────────────────────────────────────── */
+/* Thin: lighter weight + smaller size so it reads as a fine line */
+[data-testid="border-width-thin"],
+[data-testid="edge-stroke-width-thin"] {
+  font-size: 10px;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+}
+
+/* Medium: default weight, keep as-is */
+[data-testid="border-width-medium"],
+[data-testid="edge-stroke-width-medium"] {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Thick: bold and large so it reads as a heavy stroke */
+[data-testid="border-width-thick"],
+[data-testid="edge-stroke-width-thick"] {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* ─── LINE toggle visual style ───────────────────────────────────────────── */
+/* Increase size slightly across all line style toggles for legibility */
+[data-testid="border-style-solid"],
+[data-testid="border-style-dashed"],
+[data-testid="border-style-dotted"],
+[data-testid="edge-stroke-style-solid"],
+[data-testid="edge-stroke-style-dashed"],
+[data-testid="edge-stroke-style-dotted"] {
+  font-size: 15px;
+  letter-spacing: 0.04em;
 }

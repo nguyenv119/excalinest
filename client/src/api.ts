@@ -15,6 +15,7 @@ export interface CanvasNodeData {
   border_width: string | null;  // 'thin' | 'medium' | 'thick' | null
   border_style: string | null;  // 'solid' | 'dashed' | 'dotted' | null
   font_size: string | null;
+  font_color: string | null;
   created_at: string;
   updated_at: string;
 }
