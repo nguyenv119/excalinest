@@ -1,8 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
-import App from './App';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as api from './api';
-import type { CanvasNodeData, CanvasEdge } from './api';
+import type { CanvasNodeData } from './api';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -27,183 +25,11 @@ const makeNode = (id: string, overrides: Partial<CanvasNodeData> = {}): CanvasNo
   ...overrides,
 });
 
-const noEdges: CanvasEdge[] = [];
-
-// ─── Tests: multiSelectionKeyCode includes Shift ──────────────────────────────
-
-describe('App — multiSelectionKeyCode includes Shift', () => {
-  beforeEach(() => {
-    // REVIEW: mocking core dependency — test may not reflect real behavior
-    vi.spyOn(api, 'fetchNodes').mockResolvedValue([makeNode('n1'), makeNode('n2')]);
-    vi.spyOn(api, 'fetchEdges').mockResolvedValue(noEdges);
-    vi.spyOn(api, 'patchNode').mockResolvedValue(makeNode('n1'));
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('renders the ReactFlow canvas with Shift in multiSelectionKeyCode', async () => {
-    /**
-     * Verifies that App mounts and the ReactFlow canvas renders — a proxy for
-     * confirming that the multiSelectionKeyCode prop includes 'Shift' without
-     * crashing ReactFlow (invalid prop values would throw or prevent render).
-     *
-     * Why: Adding 'Shift' to multiSelectionKeyCode enables Shift+click to
-     * add individual nodes to a selection, which is the standard UX pattern
-     * (e.g. Figma, Keynote). Without Shift, users must hold Cmd/Ctrl, which
-     * is non-obvious on a touch-first canvas.
-     *
-     * What breaks: Without 'Shift' in the array, Shift+clicking a node
-     * deselects all others instead of extending the selection, making
-     * multi-select frustrating to use.
-     */
-    // GIVEN the API returns two nodes
-    // (mocked in beforeEach)
-
-    // WHEN App mounts
-    const { container } = render(<App />);
-
-    // THEN the canvas renders without error
-    await waitFor(() => {
-      expect(container.querySelector('.react-flow')).not.toBeNull();
-    });
-  });
-});
-
-// ─── Tests: bulkPatchNodes called on multi-node drag ─────────────────────────
-
-describe('App — multi-node drag calls bulkPatchNodes', () => {
-  beforeEach(() => {
-    // REVIEW: mocking core dependency — test may not reflect real behavior
-    vi.spyOn(api, 'fetchEdges').mockResolvedValue(noEdges);
-    vi.spyOn(api, 'patchNode').mockResolvedValue(makeNode('n1'));
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('calls bulkPatchNodes when onNodeDragStop fires with multiple dragged nodes', async () => {
-    /**
-     * Verifies that when onNodeDragStop is called with 2+ dragged nodes,
-     * App calls bulkPatchNodes (not individual patchNode calls) to persist
-     * all positions in a single atomic request.
-     *
-     * Why: Updating N nodes with N individual PATCH /nodes/:id calls is
-     * non-atomic — a network failure after k calls leaves k nodes at their
-     * new positions and N-k at their old positions, corrupting the layout.
-     * The bulk endpoint wraps all updates in a SQLite transaction.
-     *
-     * What breaks: Multi-drag with a network interruption causes partial
-     * position saves — some dragged nodes snap back on reload while others
-     * do not, making the canvas layout inconsistent.
-     */
-    // GIVEN two nodes and a spy on bulkPatchNodes
-    const nodeA = makeNode('a', { x: 0, y: 0 });
-    const nodeB = makeNode('b', { x: 100, y: 100 });
-    vi.spyOn(api, 'fetchNodes').mockResolvedValue([nodeA, nodeB]);
-    const bulkSpy = vi.spyOn(api, 'bulkPatchNodes').mockResolvedValue([nodeA, nodeB]);
-
-    // WHEN App mounts
-    const { container } = render(<App />);
-    await waitFor(() => {
-      expect(container.querySelector('.react-flow')).not.toBeNull();
-    });
-
-    // AND onNodeDragStop fires with 2 dragged nodes (simulated via data-testid hook)
-    const dragStopTrigger = container.querySelector('[data-testid="drag-stop-trigger"]') as HTMLElement | null;
-    if (dragStopTrigger) {
-      dragStopTrigger.click();
-    }
-
-    // THEN bulkPatchNodes was called if the trigger existed, OR we verify
-    // that patchNode was NOT called with multiple separate single calls.
-    // The key contract: when >1 node dragged, bulkPatchNodes is used.
-    // We verify the spy was registered and the function is exported.
-    expect(typeof api.bulkPatchNodes).toBe('function');
-    expect(bulkSpy).toBeDefined();
-  });
-
-  it('calls patchNode (not bulkPatchNodes) when only one node is dragged', async () => {
-    /**
-     * Verifies that single-node drag continues to use the individual patchNode
-     * call, not the bulk endpoint.
-     *
-     * Why: The bulk endpoint carries more overhead (parsing an array, running
-     * a transaction). For the common case of dragging a single node, the
-     * individual PATCH /nodes/:id is more efficient and backward-compatible
-     * with the existing server behavior.
-     *
-     * What breaks: If single drags always use the bulk path, single-node drag
-     * performance degrades and the existing behavior contract changes.
-     */
-    // GIVEN one node
-    const nodeA = makeNode('a', { x: 0, y: 0 });
-    vi.spyOn(api, 'fetchNodes').mockResolvedValue([nodeA]);
-    const bulkSpy = vi.spyOn(api, 'bulkPatchNodes').mockResolvedValue([nodeA]);
-    const patchSpy = vi.spyOn(api, 'patchNode').mockResolvedValue(nodeA);
-
-    // WHEN App mounts
-    const { container } = render(<App />);
-    await waitFor(() => {
-      expect(container.querySelector('.react-flow')).not.toBeNull();
-    });
-
-    // THEN bulkPatchNodes is not called on initial render
-    // (it would only be called on actual drag stop with >1 node)
-    expect(bulkSpy).not.toHaveBeenCalled();
-    // patchSpy is defined and available for single-drag use
-    expect(patchSpy).toBeDefined();
-  });
-});
-
-// ─── Tests: handleSelectionChange tracks selectedNodeIds ──────────────────────
-
-describe('App — selectedNodeIds state tracks multi-selection', () => {
-  beforeEach(() => {
-    // REVIEW: mocking core dependency — test may not reflect real behavior
-    vi.spyOn(api, 'fetchEdges').mockResolvedValue(noEdges);
-    vi.spyOn(api, 'patchNode').mockResolvedValue(makeNode('n1'));
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('closes NodeDetailPanel when more than 1 node is selected', async () => {
-    /**
-     * Verifies that when 2+ nodes are selected, the single-node NodeDetailPanel
-     * closes (selectedNodeId is cleared).
-     *
-     * Why: The NodeDetailPanel is designed for a single node (shows title,
-     * notes, delete button). Showing it when multiple nodes are selected would
-     * be confusing — the panel can't represent multiple nodes. KC-4.2 will
-     * add a dedicated multi-select panel; for now the panel must close.
-     *
-     * What breaks: The detail panel shows one node's data while the user
-     * believes they have multiple nodes selected, leading to accidental
-     * single-node edits or deletes when the user intended to operate on the
-     * whole selection.
-     */
-    // GIVEN two nodes
-    vi.spyOn(api, 'fetchNodes').mockResolvedValue([makeNode('n1'), makeNode('n2')]);
-
-    // WHEN App mounts
-    const { container } = render(<App />);
-    await waitFor(() => {
-      expect(container.querySelector('.react-flow')).not.toBeNull();
-    });
-
-    // THEN the NodeDetailPanel is not visible (no node selected initially)
-    // The panel renders only when a node is selected; it's not shown at startup
-    const panel = container.querySelector('.kc-panel');
-    // Panel is absent when no node is selected
-    expect(panel).toBeNull();
-  });
-});
-
 // ─── Tests: bulkPatchNodes API function ────────────────────────────────────────
+// These tests verify the API contract that App.tsx depends on for multi-drag.
+// React Flow's onNodeDragStop callback cannot be triggered in jsdom, so we test
+// the API layer directly — the server integration tests (nodes.bulk.test.ts)
+// cover the end-to-end persistence.
 
 describe('api.bulkPatchNodes', () => {
   afterEach(() => {
@@ -285,5 +111,33 @@ describe('api.bulkPatchNodes', () => {
     // WHEN calling bulkPatchNodes
     // THEN it throws
     await expect(api.bulkPatchNodes([{ id: 'x', x: 0, y: 0 }])).rejects.toThrow();
+  });
+
+  it('sends only the specified fields per patch (no extra keys)', async () => {
+    /**
+     * Verifies that bulkPatchNodes faithfully sends the exact patch objects
+     * without adding or stripping fields.
+     *
+     * Why: The server validates and filters to allowed fields. But the client
+     * must send the right shape — sending unexpected keys wastes bandwidth
+     * and could confuse future server-side validation.
+     *
+     * What breaks: Extra fields could trigger unexpected server behavior or
+     * mask client bugs where the wrong field name is used (e.g. 'posX' vs 'x').
+     */
+    // GIVEN a mock fetch
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => [makeNode('a')],
+    } as Response);
+
+    // WHEN calling with a position-only patch
+    const patches = [{ id: 'a', x: 50, y: 75 }];
+    await api.bulkPatchNodes(patches);
+
+    // THEN the body contains exactly { patches } with no extra keys
+    const call = vi.mocked(globalThis.fetch).mock.calls[0];
+    const body = JSON.parse(call[1]!.body as string);
+    expect(body).toEqual({ patches: [{ id: 'a', x: 50, y: 75 }] });
   });
 });

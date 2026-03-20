@@ -9,6 +9,10 @@ import type Database from 'better-sqlite3';
 export function makeNodesRouter(database: Database.Database): Router {
   const router = Router();
 
+  const ALLOWED_NODE_FIELDS = ['title', 'notes', 'x', 'y', 'collapsed', 'parent_id', 'width', 'height',
+    'border_color', 'bg_color', 'border_width', 'border_style', 'font_size', 'font_color'] as const;
+  type AllowedField = (typeof ALLOWED_NODE_FIELDS)[number];
+
   // GET /nodes — return all nodes
   router.get('/', (_req: Request, res: Response) => {
     const nodes = database.prepare('SELECT * FROM nodes ORDER BY parent_id NULLS FIRST').all();
@@ -64,10 +68,6 @@ export function makeNodesRouter(database: Database.Database): Router {
       return;
     }
 
-    const allowed = ['title', 'notes', 'x', 'y', 'collapsed', 'parent_id', 'width', 'height',
-      'border_color', 'bg_color', 'border_width', 'border_style', 'font_size', 'font_color'] as const;
-    type AllowedField = (typeof allowed)[number];
-
     // Validate that every patch references an existing node before mutating anything
     for (const patch of patches) {
       const id = patch['id'];
@@ -88,7 +88,7 @@ export function makeNodesRouter(database: Database.Database): Router {
       for (const patch of patchList) {
         const id = patch['id'] as string;
         const updates: Partial<Record<AllowedField, unknown>> = {};
-        for (const field of allowed) {
+        for (const field of ALLOWED_NODE_FIELDS) {
           if (Object.prototype.hasOwnProperty.call(patch, field)) {
             updates[field] = patch[field];
           }
@@ -120,12 +120,8 @@ export function makeNodesRouter(database: Database.Database): Router {
       return;
     }
 
-    const allowed = ['title', 'notes', 'x', 'y', 'collapsed', 'parent_id', 'width', 'height',
-      'border_color', 'bg_color', 'border_width', 'border_style', 'font_size', 'font_color'] as const;
-    type AllowedField = (typeof allowed)[number];
-
     const updates: Partial<Record<AllowedField, unknown>> = {};
-    for (const field of allowed) {
+    for (const field of ALLOWED_NODE_FIELDS) {
       if (Object.prototype.hasOwnProperty.call(req.body, field)) {
         updates[field] = (req.body as Record<string, unknown>)[field];
       }

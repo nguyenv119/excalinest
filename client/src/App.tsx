@@ -285,7 +285,7 @@ export default function App() {
   const nodesRef = useRef<CanvasNodeType[]>(nodes);
   nodesRef.current = nodes;
 
-  // ─── selectedNodeIds ref (for reading in stable drag callback) ────────────
+  // ─── selectedNodeIds ref — consumed by KC-4.2+ (bulk style, resize, paste) ─
   selectedNodeIdsRef.current = selectedNodeIds;
 
   // ─── Collapse / expand ────────────────────────────────────────────────────
@@ -481,6 +481,10 @@ export default function App() {
       if (ids.length === 1) {
         setSelectedNodeId(ids[0]);
       } else if (ids.length > 1) {
+        setSelectedNodeId(null);
+        setSelectedEdgeId(null);
+      } else {
+        // 0 selected (e.g. Escape key deselects all)
         setSelectedNodeId(null);
         setSelectedEdgeId(null);
       }
