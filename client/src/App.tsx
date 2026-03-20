@@ -35,6 +35,7 @@ import { MultiSelectPanel } from './components/MultiSelectPanel';
 import type { StylePatch } from './api';
 import { ViewportController, VIEWPORT_KEY } from './components/ViewportController';
 import type { ViewportCommand } from './components/ViewportController';
+import { NODE_MIN_WIDTH, NODE_MIN_HEIGHT } from './styleConstants';
 import {
   fetchNodes,
   fetchEdges,
@@ -410,52 +411,47 @@ export default function App() {
       // Only act when multiple nodes are selected (this node + at least one other)
       if (allSelectedIds.length <= 1) return;
 
-      const MIN_WIDTH = 150;
-      const MIN_HEIGHT = 60;
-
+      // Compute patches from current nodes OUTSIDE setNodes to avoid
+      // double-invocation in React Strict Mode pushing duplicates.
+      const currentNodes = nodesRef.current;
       const patches: Array<{ id: string; width: number; height: number }> = [];
 
+      for (const n of currentNodes) {
+        if (n.id === sourceId) continue;
+        if (!allSelectedIds.includes(n.id)) continue;
+
+        let refWidth: number | undefined;
+        let refHeight: number | undefined;
+
+        const isCollapsed = n.data.collapsed;
+        if (isCollapsed) {
+          const saved = expandedStylesRef.current.get(n.id);
+          if (!saved) continue;
+          refWidth = saved.width;
+          refHeight = saved.height;
+        } else {
+          const sw = n.style?.width;
+          const sh = n.style?.height;
+          if (sw == null || sh == null) continue;
+          refWidth = sw as number;
+          refHeight = sh as number;
+        }
+
+        const newWidth = Math.max(NODE_MIN_WIDTH, Math.round(refWidth * scaleX));
+        const newHeight = Math.max(NODE_MIN_HEIGHT, Math.round(refHeight * scaleY));
+        patches.push({ id: n.id, width: newWidth, height: newHeight });
+      }
+
+      // Update expandedStylesRef and local node state
       setNodes((nds) =>
         nds.map((n) => {
-          // Skip the node being resized — it already updated itself via handleNodeResized
-          if (n.id === sourceId) return n;
-          // Skip nodes not in the selection
-          if (!allSelectedIds.includes(n.id)) return n;
+          const patch = patches.find((p) => p.id === n.id);
+          if (!patch) return n;
 
-          // Determine the reference dimensions to scale.
-          // For collapsed nodes, use expandedStylesRef (the real content size).
-          // For normal nodes, use style.width / style.height.
-          let refWidth: number | undefined;
-          let refHeight: number | undefined;
+          expandedStylesRef.current.set(n.id, { width: patch.width, height: patch.height });
 
-          const isCollapsed = n.data.collapsed;
-          if (isCollapsed) {
-            const saved = expandedStylesRef.current.get(n.id);
-            if (!saved) return n; // no stored dims — skip
-            refWidth = saved.width;
-            refHeight = saved.height;
-          } else {
-            const sw = n.style?.width;
-            const sh = n.style?.height;
-            if (sw == null || sh == null) return n; // auto-sized — skip
-            refWidth = sw as number;
-            refHeight = sh as number;
-          }
-
-          const newWidth = Math.max(MIN_WIDTH, Math.round(refWidth * scaleX));
-          const newHeight = Math.max(MIN_HEIGHT, Math.round(refHeight * scaleY));
-
-          // Update expandedStylesRef so collapse/expand restores the new size
-          expandedStylesRef.current.set(n.id, { width: newWidth, height: newHeight });
-
-          patches.push({ id: n.id, width: newWidth, height: newHeight });
-
-          if (isCollapsed) {
-            // Keep the collapsed visual style (header bar only); only the stored
-            // expanded dims changed. The node will expand to newWidth × newHeight.
-            return n;
-          }
-          return { ...n, style: { ...n.style, width: newWidth, height: newHeight } };
+          if (n.data.collapsed) return n;
+          return { ...n, style: { ...n.style, width: patch.width, height: patch.height } };
         })
       );
 

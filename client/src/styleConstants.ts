@@ -1,5 +1,9 @@
 // Shared style constants used by NodeDetailPanel and MultiSelectPanel (via StyleControls).
 
+// ─── Node dimension constraints ──────────────────────────────────────────────
+export const NODE_MIN_WIDTH = 150;
+export const NODE_MIN_HEIGHT = 60;
+
 // ─── Node fill colors ─────────────────────────────────────────────────────────
 export const BG_COLORS = [
   { id: 'default', label: 'Transparent', color: 'transparent', display: 'transparent', border: 'rgba(255,255,255,0.15)' },

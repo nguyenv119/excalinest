@@ -3,6 +3,7 @@ import type { CSSProperties, MouseEvent } from 'react';
 import { Handle, Position, NodeResizer, useConnection, useViewport } from '@xyflow/react';
 import type { Node, NodeProps, ResizeDragEvent, ResizeParams } from '@xyflow/react';
 import { patchNode } from '../api';
+import { NODE_MIN_WIDTH, NODE_MIN_HEIGHT } from '../styleConstants';
 import { borderWidthToCss, fontSizeToCss, fontSizeToPx } from '../styleTokens';
 
 // Minimum legible screen-space pixels for counter-scaled map labels.
@@ -135,8 +136,8 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
     >
       {/* Hide resizer on collapsed nodes — can't resize a compact title bar */}
       <NodeResizer
-        minWidth={150}
-        minHeight={60}
+        minWidth={NODE_MIN_WIDTH}
+        minHeight={NODE_MIN_HEIGHT}
         isVisible={!!selected && !collapsed}
         color="var(--accent)"
         handleStyle={{ width: 12, height: 12, borderRadius: 3 }}
