@@ -49,7 +49,7 @@ import {
   bulkCreateEdges,
 } from './api';
 import type { CanvasNodeData, CanvasEdge as CanvasEdgeData } from './api';
-import { buildChildMap, getDescendants } from './collapse';
+import { buildChildMap, getDescendants, getVisibleDescendants } from './collapse';
 import { strokeWidthToCss, strokeStyleToDasharray } from './styleTokens';
 import type { ClipboardData } from './clipboard';
 
@@ -316,8 +316,23 @@ export default function App() {
 
     const newCollapsed = !node.data.collapsed;
     const currentChildMap = childMapRef.current;
-    const descendants = getDescendants(id, currentChildMap);
-    const descendantSet = new Set(descendants);
+
+    // When collapsing: hide ALL descendants regardless of their own collapsed state.
+    // When expanding: only unhide descendants that are not behind a collapsed
+    // intermediate — those remain hidden under their own parent's collapsed state.
+    let affectedIds: Set<string>;
+    if (newCollapsed) {
+      affectedIds = new Set(getDescendants(id, currentChildMap));
+    } else {
+      // Build the set of currently collapsed node ids (excluding the node being
+      // expanded, which is transitioning away from collapsed).
+      const collapsedIds = new Set(
+        currentNodes
+          .filter((n) => n.id !== id && n.data.collapsed)
+          .map((n) => n.id)
+      );
+      affectedIds = new Set(getVisibleDescendants(id, currentChildMap, collapsedIds));
+    }
 
     setNodes((nds) =>
       nds.map((n) => {
@@ -339,7 +354,7 @@ export default function App() {
           }
           return { ...n, data: { ...n.data, collapsed: newCollapsed }, style: newStyle };
         }
-        if (descendantSet.has(n.id)) {
+        if (affectedIds.has(n.id)) {
           return { ...n, hidden: newCollapsed };
         }
         return n;
@@ -348,10 +363,26 @@ export default function App() {
 
     setEdges((eds) =>
       eds.map((e) => {
-        const affectsEdge =
-          descendantSet.has(e.source) || descendantSet.has(e.target);
-        if (!affectsEdge) return e;
-        return { ...e, hidden: newCollapsed };
+        // On collapse: hide edges where either endpoint is a descendant.
+        // On expand: only unhide edges where BOTH endpoints are now visible
+        // (i.e., neither endpoint remains hidden behind a collapsed intermediate).
+        if (newCollapsed) {
+          const affectsEdge =
+            affectedIds.has(e.source) || affectedIds.has(e.target);
+          if (!affectsEdge) return e;
+          return { ...e, hidden: true };
+        } else {
+          // After expand, re-evaluate each previously-hidden edge: only unhide
+          // if both source and target are in the visible-descendants set (or are
+          // the expanding node itself). Edges touching still-hidden nodes stay hidden.
+          if (!e.hidden) return e;
+          const sourceVisible = e.source === id || affectedIds.has(e.source);
+          const targetVisible = e.target === id || affectedIds.has(e.target);
+          if (sourceVisible && targetVisible) {
+            return { ...e, hidden: false };
+          }
+          return e;
+        }
       })
     );
 

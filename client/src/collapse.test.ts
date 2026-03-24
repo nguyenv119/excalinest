@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildChildMap, getDescendants } from './collapse';
+import { buildChildMap, getDescendants, getVisibleDescendants } from './collapse';
 
 // ─── buildChildMap ────────────────────────────────────────────────────────────
 
@@ -140,5 +140,162 @@ describe('getDescendants', () => {
 
     // THEN exactly the three children are returned
     expect(descendants).toEqual(['c1', 'c2', 'c3']);
+  });
+});
+
+// ─── getVisibleDescendants ─────────────────────────────────────────────────────
+
+describe('getVisibleDescendants', () => {
+  it('returns all descendants when no intermediate node is collapsed', () => {
+    /**
+     * Verifies that getVisibleDescendants returns the same set as
+     * getDescendants when no intermediate node in the subtree is collapsed.
+     *
+     * Why: When expanding a top-level parent whose subtree has no collapsed
+     * intermediates, every descendant should become visible. If the function
+     * incorrectly stops BFS early, nodes deeper in the tree stay hidden even
+     * though the path to them is fully open.
+     *
+     * What breaks: Expanding a root node would not unhide grandchildren even
+     * when the intermediate parents are also expanded.
+     */
+    // GIVEN a three-level tree where no node is collapsed
+    const childMap = new Map<string, string[]>([
+      ['root', ['child1', 'child2']],
+      ['child1', ['grandchild1']],
+    ]);
+    const collapsedIds = new Set<string>();
+
+    // WHEN we get visible descendants of root
+    const visible = getVisibleDescendants('root', childMap, collapsedIds);
+
+    // THEN all descendants are returned
+    expect(visible).toContain('child1');
+    expect(visible).toContain('child2');
+    expect(visible).toContain('grandchild1');
+    expect(visible).toHaveLength(3);
+  });
+
+  it('stops at collapsed intermediate node — grandchildren of collapsed child are excluded', () => {
+    /**
+     * Verifies that getVisibleDescendants stops BFS traversal at a collapsed
+     * intermediate node so its descendants remain hidden.
+     *
+     * This is the core regression test for the grandchild visibility bug:
+     * Enrichment > Scraping (collapsed) > Manual (MO). When Enrichment is
+     * expanded, Manual (MO) should stay hidden because its direct parent
+     * Scraping is still collapsed.
+     *
+     * Why: The naive fix unhides ALL descendants on expand. But when an
+     * intermediate parent is collapsed, its children are hidden by THAT
+     * parent's collapsed state — expanding the grandparent must not override
+     * the intermediate parent's collapsed state.
+     *
+     * What breaks: After collapsing Scraping, then collapsing and expanding
+     * Enrichment, Manual (MO) becomes visible even though Scraping is still
+     * collapsed — the grandchild appears floating without its parent.
+     */
+    // GIVEN a three-level tree: enrichment > scraping (collapsed) > manual
+    const childMap = new Map<string, string[]>([
+      ['enrichment', ['scraping', 'other-child']],
+      ['scraping', ['manual']],
+    ]);
+    // Scraping is still collapsed
+    const collapsedIds = new Set<string>(['scraping']);
+
+    // WHEN we get visible descendants of enrichment (which is being expanded)
+    const visible = getVisibleDescendants('enrichment', childMap, collapsedIds);
+
+    // THEN scraping is included (it becomes visible as a direct child)
+    // but manual is NOT included (hidden behind collapsed scraping)
+    expect(visible).toContain('scraping');
+    expect(visible).toContain('other-child');
+    expect(visible).not.toContain('manual');
+    expect(visible).toHaveLength(2);
+  });
+
+  it('excludes the entire subtree of a collapsed intermediate node', () => {
+    /**
+     * Verifies that all descendants beyond a collapsed intermediate — not
+     * just the immediate children — are excluded from the visible set.
+     *
+     * Why: A collapsed node may have multiple levels of descendants beneath
+     * it. All of them must remain hidden when expanding the grandparent,
+     * not just the direct children of the collapsed node.
+     *
+     * What breaks: After expanding a grandparent, grandchildren of a
+     * collapsed intermediate become visible but great-grandchildren remain
+     * hidden — an inconsistent partial-reveal state.
+     */
+    // GIVEN a four-level tree: root > mid (collapsed) > child > grandchild
+    const childMap = new Map<string, string[]>([
+      ['root', ['mid']],
+      ['mid', ['child']],
+      ['child', ['grandchild']],
+    ]);
+    const collapsedIds = new Set<string>(['mid']);
+
+    // WHEN we get visible descendants of root
+    const visible = getVisibleDescendants('root', childMap, collapsedIds);
+
+    // THEN only mid is visible; child and grandchild stay hidden
+    expect(visible).toContain('mid');
+    expect(visible).not.toContain('child');
+    expect(visible).not.toContain('grandchild');
+    expect(visible).toHaveLength(1);
+  });
+
+  it('returns empty array for a leaf node', () => {
+    /**
+     * Verifies getVisibleDescendants returns [] for a node with no children.
+     *
+     * Why: Calling this on a leaf (e.g., if toggle fires on a leaf due to
+     * a race condition) must be safe and return nothing to unhide.
+     *
+     * What breaks: A crash or undefined return would break the expand path
+     * entirely for canvases where a leaf is somehow toggled.
+     */
+    // GIVEN a childMap where the target node is a leaf
+    const childMap = new Map<string, string[]>([['root', ['leaf']]]);
+    const collapsedIds = new Set<string>();
+
+    // WHEN we get visible descendants of the leaf
+    const visible = getVisibleDescendants('leaf', childMap, collapsedIds);
+
+    // THEN result is empty
+    expect(visible).toHaveLength(0);
+  });
+
+  it('handles multiple collapsed intermediates at different levels', () => {
+    /**
+     * Verifies that BFS stops independently at each collapsed intermediate,
+     * even when multiple collapsed nodes exist at different depths.
+     *
+     * Why: A canvas can have multiple partially-expanded subtrees. Each
+     * collapsed node must independently gate its subtree, regardless of
+     * depth or sibling relationship.
+     *
+     * What breaks: One collapsed node's subtree bleeds through while another
+     * correctly gates, resulting in asymmetric visible states.
+     */
+    // GIVEN a tree: root > [a (collapsed), b] > a > [a1], b > [b1 (collapsed)] > [b2]
+    const childMap = new Map<string, string[]>([
+      ['root', ['a', 'b']],
+      ['a', ['a1']],
+      ['b', ['b1']],
+      ['b1', ['b2']],
+    ]);
+    const collapsedIds = new Set<string>(['a', 'b1']);
+
+    // WHEN we get visible descendants of root
+    const visible = getVisibleDescendants('root', childMap, collapsedIds);
+
+    // THEN a and b are visible, but a1 (behind collapsed a) and b2 (behind collapsed b1) are not
+    expect(visible).toContain('a');
+    expect(visible).toContain('b');
+    expect(visible).toContain('b1'); // b1 itself is visible (direct child of b, which is open)
+    expect(visible).not.toContain('a1');
+    expect(visible).not.toContain('b2');
+    expect(visible).toHaveLength(3);
   });
 });

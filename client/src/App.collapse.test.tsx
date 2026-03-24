@@ -384,6 +384,171 @@ describe('App — collapse/expand behavior', () => {
     });
   });
 
+  it('expanding a grandparent keeps grandchildren hidden when intermediate parent is still collapsed', async () => {
+    /**
+     * Verifies the grandchild visibility bug: when Enrichment > Scraping
+     * (collapsed) > Manual (MO), collapsing Enrichment hides both Scraping
+     * and Manual, then expanding Enrichment should only reveal Scraping — not
+     * Manual, because Scraping is still collapsed.
+     *
+     * Why: The naive expand path sets hidden:false on ALL descendants. This
+     * ignores the collapsed state of intermediate parents, causing nodes to
+     * appear "floating" with their parent still hidden.
+     *
+     * What breaks: After expand, Manual (MO) becomes visible even though
+     * its immediate parent Scraping is still collapsed — users see an
+     * orphaned node with no visible parent.
+     */
+    // GIVEN a three-level tree: enrichment (expanded) > scraping (collapsed) > manual
+    const enrichment: CanvasNodeData = {
+      ...parentNode,
+      id: 'enrichment',
+      title: 'Enrichment',
+      collapsed: 0,
+      width: 320,
+      height: 400,
+    };
+    const scraping: CanvasNodeData = {
+      ...childNode,
+      id: 'scraping',
+      parent_id: 'enrichment',
+      title: 'Scraping',
+      collapsed: 1, // Scraping is independently collapsed
+      width: 240,
+      height: 200,
+    };
+    const manual: CanvasNodeData = {
+      ...childNode,
+      id: 'manual',
+      parent_id: 'scraping',
+      title: 'Manual (MO)',
+      collapsed: 0,
+    };
+
+    // REVIEW: mocking core dependency — test may not reflect real behavior
+    vi.spyOn(api, 'fetchNodes').mockResolvedValue([enrichment, scraping, manual]);
+    vi.spyOn(api, 'fetchEdges').mockResolvedValue([]);
+    vi.spyOn(api, 'patchNode').mockResolvedValue(enrichment);
+
+    // WHEN App mounts (manual is already hidden because scraping is collapsed)
+    const { container } = render(<App />);
+    await waitFor(() => {
+      expect(container.querySelector('.react-flow')).not.toBeNull();
+    });
+
+    // collapse Enrichment — hides scraping and manual
+    const toggleButton = await waitFor(() => {
+      const btn = container.querySelector('[data-testid="collapse-toggle"]');
+      expect(btn).not.toBeNull();
+      return btn!;
+    });
+    fireEvent.click(toggleButton);
+
+    // wait for enrichment to collapse (scraping should be gone)
+    await waitFor(() => {
+      expect(container.querySelector('[data-id="scraping"]')).toBeNull();
+    });
+
+    // expand Enrichment — should reveal scraping but NOT manual
+    fireEvent.click(container.querySelector('[data-testid="collapse-toggle"]')!);
+
+    // THEN scraping becomes visible again
+    await waitFor(() => {
+      expect(container.querySelector('[data-id="scraping"]')).not.toBeNull();
+    });
+
+    // AND manual stays hidden (Scraping is still collapsed)
+    // manual should not be in the DOM since it's hidden
+    expect(container.querySelector('[data-id="manual"]')).toBeNull();
+  });
+
+  it('edges to still-hidden grandchildren remain hidden after grandparent expand', async () => {
+    /**
+     * Verifies that when expanding a grandparent, edges whose endpoints
+     * are still hidden (because an intermediate parent is still collapsed)
+     * remain hidden.
+     *
+     * Why: If edge visibility is also fixed on the naive "unhide all" path,
+     * an edge from a visible node to a still-hidden grandchild would render
+     * as a dangling arrow — one endpoint visible, one invisible.
+     *
+     * What breaks: After expanding Enrichment, an edge between a visible
+     * node and still-hidden Manual (MO) appears as a floating arrow going
+     * nowhere, breaking the visual consistency of the canvas.
+     */
+    // GIVEN enrichment > scraping (collapsed) > manual, with an edge from enrichment to manual
+    const enrichment: CanvasNodeData = {
+      ...parentNode,
+      id: 'enrichment',
+      title: 'Enrichment',
+      collapsed: 0,
+      width: 320,
+      height: 400,
+    };
+    const scraping: CanvasNodeData = {
+      ...childNode,
+      id: 'scraping',
+      parent_id: 'enrichment',
+      title: 'Scraping',
+      collapsed: 1,
+      width: 240,
+      height: 200,
+    };
+    const manual: CanvasNodeData = {
+      ...childNode,
+      id: 'manual',
+      parent_id: 'scraping',
+      title: 'Manual (MO)',
+      collapsed: 0,
+    };
+    const edgeToManual: CanvasEdge = {
+      id: 'e-enrichment-manual',
+      source_id: 'enrichment',
+      target_id: 'manual',
+      source_handle: null,
+      target_handle: null,
+      label: null,
+      stroke_color: null,
+      stroke_width: null,
+      stroke_style: null,
+      created_at: '2024-01-01T00:00:00Z',
+    };
+
+    // REVIEW: mocking core dependency — test may not reflect real behavior
+    vi.spyOn(api, 'fetchNodes').mockResolvedValue([enrichment, scraping, manual]);
+    vi.spyOn(api, 'fetchEdges').mockResolvedValue([edgeToManual]);
+    vi.spyOn(api, 'patchNode').mockResolvedValue(enrichment);
+
+    // WHEN App mounts, collapse Enrichment, then expand Enrichment
+    const { container } = render(<App />);
+    await waitFor(() => {
+      expect(container.querySelector('.react-flow')).not.toBeNull();
+    });
+
+    const toggleButton = await waitFor(() => {
+      const btn = container.querySelector('[data-testid="collapse-toggle"]');
+      expect(btn).not.toBeNull();
+      return btn!;
+    });
+
+    // Collapse enrichment
+    fireEvent.click(toggleButton);
+    await waitFor(() => {
+      expect(container.querySelector('[data-id="scraping"]')).toBeNull();
+    });
+
+    // Expand enrichment
+    fireEvent.click(container.querySelector('[data-testid="collapse-toggle"]')!);
+
+    // THEN scraping is visible again
+    await waitFor(() => {
+      expect(container.querySelector('[data-id="scraping"]')).not.toBeNull();
+    });
+
+    // AND the edge to still-hidden manual remains absent from the DOM
+    expect(container.querySelector('[data-id="e-enrichment-manual"]')).toBeNull();
+  });
+
   it('hides edges connected to hidden nodes when a parent is collapsed', async () => {
     /**
      * Verifies that edges whose source or target is a hidden descendant are
