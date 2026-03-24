@@ -2,7 +2,7 @@
  * ViewportController integration tests.
  *
  * These tests verify that App.tsx correctly wires ViewportController into
- * ReactFlow, dispatches viewport commands on collapse/expand, and persists
+ * ReactFlow, verifies viewport stays put on collapse/expand, and persists
  * viewport state to localStorage via onMoveEnd.
  *
  * Kept separate from App.collapse.test.tsx because this file mocks
@@ -23,19 +23,17 @@ import type { CanvasNodeData } from './api';
 // ─── ReactFlow stub ──────────────────────────────────────────────────────────
 // Captures props passed to <ReactFlow> so tests can:
 //   1. Verify onMoveEnd is wired (localStorage persistence)
-//   2. Trigger onToggleCollapse directly from node data (viewport commands)
+//   2. Trigger onToggleCollapse directly from node data (collapse/expand)
 //   3. Assert fitView prop value (first-visit vs saved-viewport)
 //
-// Also stubs useReactFlow so ViewportController can call setViewport and
-// screenToFlowPosition without a real layout engine (jsdom).
+// Also stubs useReactFlow so ViewportController can call setViewport,
+// screenToFlowPosition, and getViewport without a real layout engine (jsdom).
 //
 // Background/Controls/MiniMap are nulled because they use the ReactFlow
 // zustand store internally, which is unavailable when ReactFlow itself is a stub.
 
 let capturedReactFlowProps: Record<string, unknown> = {};
-const mockFitBounds = vi.fn();
 const mockSetViewport = vi.fn();
-const mockGetInternalNode = vi.fn();
 
 // REVIEW: mocking core dependency — test may not reflect real behavior
 vi.mock('@xyflow/react', async (importOriginal) => {
@@ -52,9 +50,7 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     Controls: () => null,
     MiniMap: () => null,
     useReactFlow: () => ({
-      fitBounds: mockFitBounds,
       setViewport: mockSetViewport,
-      getInternalNode: mockGetInternalNode,
     }),
   };
 });
@@ -119,9 +115,7 @@ async function waitForToggleCollapse(nodeId: string): Promise<(id: string) => vo
 describe('App — ViewportController integration', () => {
   beforeEach(() => {
     capturedReactFlowProps = {};
-    mockFitBounds.mockClear();
     mockSetViewport.mockClear();
-    mockGetInternalNode.mockClear();
     localStorage.clear();
 
     // REVIEW: mocking core dependency — test may not reflect real behavior
@@ -257,26 +251,18 @@ describe('App — ViewportController integration', () => {
      * a node again hijacks the viewport, moving it away from whatever the
      * user was looking at.
      */
-    // GIVEN a parent with one child
-    mockGetInternalNode.mockReturnValue({
-      position: { x: 0, y: 0 },
-      internals: { positionAbsolute: { x: 10, y: 20 } },
-      style: { width: 320, height: 240 },
-    });
-
+    // GIVEN a parent with one child, collapsed first
     render(<App />);
     const toggleCollapse = await waitForToggleCollapse('parent');
-
-    // Collapse first so we can then expand
     act(() => { toggleCollapse('parent'); });
-    mockFitBounds.mockClear();
+    mockSetViewport.mockClear();
 
     // WHEN expand is triggered (toggle on a collapsed node)
     act(() => { toggleCollapse('parent'); });
-
-    // THEN fitBounds is NOT called — viewport stays put
     await new Promise((r) => setTimeout(r, 100));
-    expect(mockFitBounds).not.toHaveBeenCalled();
+
+    // THEN setViewport is NOT called — viewport stays put on expand
+    expect(mockSetViewport).not.toHaveBeenCalled();
   }, 10000);
 
   it('collapsing an expanded parent does NOT call setViewport (auto-zoom removed)', async () => {
