@@ -2,7 +2,7 @@
  * ViewportController integration tests.
  *
  * These tests verify that App.tsx correctly wires ViewportController into
- * ReactFlow, dispatches viewport commands on collapse/expand, and persists
+ * ReactFlow, verifies viewport stays put on collapse/expand, and persists
  * viewport state to localStorage via onMoveEnd.
  *
  * Kept separate from App.collapse.test.tsx because this file mocks
@@ -23,20 +23,17 @@ import type { CanvasNodeData } from './api';
 // ─── ReactFlow stub ──────────────────────────────────────────────────────────
 // Captures props passed to <ReactFlow> so tests can:
 //   1. Verify onMoveEnd is wired (localStorage persistence)
-//   2. Trigger onToggleCollapse directly from node data (viewport commands)
+//   2. Trigger onToggleCollapse directly from node data (collapse/expand)
 //   3. Assert fitView prop value (first-visit vs saved-viewport)
 //
-// Also stubs useReactFlow so ViewportController can call fitBounds, setViewport,
-// getViewport, and getInternalNode without a real layout engine (jsdom).
+// Also stubs useReactFlow so ViewportController can call setViewport,
+// screenToFlowPosition, and getViewport without a real layout engine (jsdom).
 //
 // Background/Controls/MiniMap are nulled because they use the ReactFlow
 // zustand store internally, which is unavailable when ReactFlow itself is a stub.
 
 let capturedReactFlowProps: Record<string, unknown> = {};
-const mockFitBounds = vi.fn();
 const mockSetViewport = vi.fn();
-const mockGetViewport = vi.fn(() => ({ x: 10, y: 20, zoom: 1.5 }) as Viewport);
-const mockGetInternalNode = vi.fn();
 
 // REVIEW: mocking core dependency — test may not reflect real behavior
 vi.mock('@xyflow/react', async (importOriginal) => {
@@ -53,10 +50,7 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     Controls: () => null,
     MiniMap: () => null,
     useReactFlow: () => ({
-      fitBounds: mockFitBounds,
       setViewport: mockSetViewport,
-      getViewport: mockGetViewport,
-      getInternalNode: mockGetInternalNode,
     }),
   };
 });
@@ -121,10 +115,7 @@ async function waitForToggleCollapse(nodeId: string): Promise<(id: string) => vo
 describe('App — ViewportController integration', () => {
   beforeEach(() => {
     capturedReactFlowProps = {};
-    mockFitBounds.mockClear();
     mockSetViewport.mockClear();
-    mockGetViewport.mockClear().mockReturnValue({ x: 10, y: 20, zoom: 1.5 });
-    mockGetInternalNode.mockClear();
     localStorage.clear();
 
     // REVIEW: mocking core dependency — test may not reflect real behavior
@@ -247,120 +238,58 @@ describe('App — ViewportController integration', () => {
     expect(capturedReactFlowProps.fitView).toBe(false);
   });
 
-  it('expanding a collapsed parent triggers fitBounds for the node area', async () => {
+  it('expanding a collapsed parent does NOT call fitBounds (auto-zoom removed)', async () => {
     /**
-     * Verifies that expanding a collapsed parent eventually calls fitBounds
-     * to animate the viewport to the parent node's area.
+     * Verifies that expanding a collapsed parent does NOT call fitBounds.
      *
-     * Why: The expand-to-zoom-fit is the primary UX of KC-3.2. Without
-     * fitBounds being called, the viewport stays wherever it was — the user
-     * has to manually navigate to the now-visible children.
+     * Why: Auto-zoom on expand was removed (KC-2r4) because users want the
+     * viewport to stay put when toggling collapse/expand. Calling fitBounds
+     * would forcibly pan/zoom to the node, overriding the user's current
+     * viewport — a disruptive behavior.
      *
-     * What breaks: Expanding a parent does not animate the viewport; children
-     * appear but the user must manually pan/zoom to find them.
+     * What breaks: If this test fails, auto-zoom has regressed and expanding
+     * a node again hijacks the viewport, moving it away from whatever the
+     * user was looking at.
      */
-    // GIVEN a parent with one child; getInternalNode returns absolute position
-    mockGetInternalNode.mockReturnValue({
-      position: { x: 0, y: 0 },
-      internals: { positionAbsolute: { x: 10, y: 20 } },
-      style: { width: 320, height: 240 },
-    });
-
+    // GIVEN a parent with one child, collapsed first
     render(<App />);
     const toggleCollapse = await waitForToggleCollapse('parent');
-
-    // Collapse first so we can then expand
     act(() => { toggleCollapse('parent'); });
-    mockFitBounds.mockClear();
+    mockSetViewport.mockClear();
 
     // WHEN expand is triggered (toggle on a collapsed node)
     act(() => { toggleCollapse('parent'); });
+    await new Promise((r) => setTimeout(r, 100));
 
-    // THEN fitBounds is eventually called with bounds derived from the
-    // node's absolute position (after the 30ms setTimeout in ViewportController)
-    await waitFor(() => {
-      expect(mockFitBounds).toHaveBeenCalledOnce();
-    }, { timeout: 500 });
+    // THEN setViewport is NOT called — viewport stays put on expand
+    expect(mockSetViewport).not.toHaveBeenCalled();
+  });
 
-    expect(mockFitBounds).toHaveBeenCalledWith(
-      expect.objectContaining({ x: 10, y: 20 }),
-      { padding: 0.15, duration: 400 }
-    );
-  }, 10000);
-
-  it('collapsing an expanded parent (after a prior expand) restores the saved viewport', async () => {
+  it('collapsing an expanded parent does NOT call setViewport (auto-zoom removed)', async () => {
     /**
-     * Verifies that collapsing a parent (after having expanded it) calls
-     * setViewport to restore the pre-expand viewport position with animation.
+     * Verifies that collapsing a parent does NOT call setViewport.
      *
-     * Why: The viewport stack makes collapse feel like "going back" rather than
-     * "hiding things". Without setViewport being called on collapse, the user
-     * is left zoomed-in on children that are now hidden, with no spatial context.
+     * Why: Auto-zoom on collapse was removed (KC-2r4) because users want the
+     * viewport to stay put when toggling collapse/expand. Previously collapsing
+     * would pop a saved viewport and animate back — that behavior is gone.
      *
-     * What breaks: Collapsing a parent after an expand does not return the
-     * viewport; the user is disoriented at the expanded zoom level.
+     * What breaks: If this test fails, collapsing a parent again animates the
+     * viewport back to a previously-saved position, overriding the user's
+     * current view.
      */
-    // GIVEN the current viewport before expand is { x:10, y:20, zoom:1.5 }
-    const savedViewport: Viewport = { x: 10, y: 20, zoom: 1.5 };
-    mockGetViewport.mockReturnValue(savedViewport);
-    mockGetInternalNode.mockReturnValue({
-      position: { x: 0, y: 0 },
-      internals: { positionAbsolute: { x: 10, y: 20 } },
-      style: { width: 320, height: 240 },
-    });
-
+    // GIVEN a parent with one child (expanded)
     render(<App />);
     const toggleCollapse = await waitForToggleCollapse('parent');
 
-    // First collapse so there's a node in collapsed state
-    await act(async () => { toggleCollapse('parent'); });
-
-    // Expand — snapshots savedViewport onto the stack
+    // WHEN collapse is triggered
     await act(async () => {
       toggleCollapse('parent');
       await new Promise((r) => setTimeout(r, 100));
     });
 
-    mockSetViewport.mockClear();
-
-    // WHEN collapse is triggered again (should pop savedViewport off stack)
-    await act(async () => {
-      toggleCollapse('parent');
-      await new Promise((r) => setTimeout(r, 50));
-    });
-
-    // THEN setViewport is called with the saved viewport and animation duration
-    expect(mockSetViewport).toHaveBeenCalledWith(
-      savedViewport,
-      { duration: 350 }
-    );
-  }, 15000);
-
-  it('collapsing without a prior expand does not call setViewport (empty stack)', async () => {
-    /**
-     * Verifies that collapsing a parent with no prior expand in this session
-     * does NOT call setViewport, since there is no saved viewport on the stack.
-     *
-     * Why: On page reload after a collapse, the stack starts empty. Calling
-     * setViewport with undefined or stale data would corrupt the viewport.
-     * The contract is: no saved viewport → no animation.
-     *
-     * What breaks: After reload, the first collapse call erroneously animates
-     * the viewport to an undefined or default position, disorienting the user.
-     */
-    // GIVEN a parent with one child that starts expanded (collapsed=0)
-    render(<App />);
-    const toggleCollapse = await waitForToggleCollapse('parent');
-
-    // WHEN collapse is clicked without any prior expand in this session
-    await act(async () => {
-      toggleCollapse('parent');
-      await new Promise((r) => setTimeout(r, 50));
-    });
-
-    // THEN setViewport is NOT called (no viewport to restore)
+    // THEN setViewport is NOT called — no viewport animation on collapse
     expect(mockSetViewport).not.toHaveBeenCalled();
-  }, 10000);
+  });
 
   it('ViewportController renders null and does not add DOM elements to the canvas', async () => {
     /**
@@ -386,36 +315,6 @@ describe('App — ViewportController integration', () => {
     // ViewportController returns null and adds no DOM nodes to the canvas.
     expect(document.querySelector('[data-testid="viewport-controller"]')).toBeNull();
   });
-
-  it('fitBounds is NOT called when getInternalNode returns null for the target node', async () => {
-    /**
-     * Verifies that when getInternalNode returns null (node not in layout yet),
-     * fitBounds is never called by ViewportController.
-     *
-     * Why: After expanding a parent the layout engine may not have positioned
-     * the node yet. Calling fitBounds with undefined coordinates produces a
-     * degenerate view. The component must guard against this case.
-     *
-     * What breaks: If fitBounds is called with null data, the canvas jumps to
-     * an invalid viewport (NaN coordinates) and the user must manually reset.
-     */
-    // GIVEN getInternalNode returns null (node not in layout)
-    mockGetInternalNode.mockReturnValue(null);
-
-    render(<App />);
-    const toggleCollapse = await waitForToggleCollapse('parent');
-
-    // Collapse first so we can expand
-    act(() => { toggleCollapse('parent'); });
-    mockFitBounds.mockClear();
-
-    // WHEN expand is triggered but getInternalNode has no layout data
-    act(() => { toggleCollapse('parent'); });
-
-    // THEN fitBounds is never called (guard prevents it)
-    await new Promise((r) => setTimeout(r, 100));
-    expect(mockFitBounds).not.toHaveBeenCalled();
-  }, 10000);
 
   it('setViewport is called on mount when localStorage has a saved viewport', async () => {
     /**
