@@ -46,3 +46,42 @@ export function getDescendants(
 
   return result;
 }
+
+/**
+ * BFS from `rootId` that stops traversal at collapsed intermediate nodes.
+ *
+ * Used during expand: only descendants whose path back to `rootId` passes
+ * through no collapsed intermediate should be unhidden. Collapsed
+ * intermediates themselves ARE included (they become visible as direct or
+ * indirect children of the expanding node), but their own descendants are
+ * not enqueued — those descendants remain hidden under the intermediate's
+ * own collapsed state.
+ *
+ * `collapsedIds` is the set of node ids that are currently collapsed
+ * (excluding `rootId` itself, which is transitioning to expanded).
+ *
+ * The root itself is NOT included in the result.
+ */
+export function getVisibleDescendants(
+  rootId: string,
+  childMap: Map<string, string[]>,
+  collapsedIds: ReadonlySet<string>
+): string[] {
+  const result: string[] = [];
+  const queue: string[] = [rootId];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const children = childMap.get(current) ?? [];
+    for (const child of children) {
+      result.push(child);
+      // Do not enqueue descendants of a collapsed intermediate — they
+      // remain hidden behind that intermediate's own collapsed state.
+      if (!collapsedIds.has(child)) {
+        queue.push(child);
+      }
+    }
+  }
+
+  return result;
+}
