@@ -263,7 +263,7 @@ describe('App — ViewportController integration', () => {
 
     // THEN setViewport is NOT called — viewport stays put on expand
     expect(mockSetViewport).not.toHaveBeenCalled();
-  }, 10000);
+  });
 
   it('collapsing an expanded parent does NOT call setViewport (auto-zoom removed)', async () => {
     /**
@@ -289,7 +289,7 @@ describe('App — ViewportController integration', () => {
 
     // THEN setViewport is NOT called — no viewport animation on collapse
     expect(mockSetViewport).not.toHaveBeenCalled();
-  }, 10000);
+  });
 
   it('ViewportController renders null and does not add DOM elements to the canvas', async () => {
     /**
@@ -315,7 +315,6 @@ describe('App — ViewportController integration', () => {
     // ViewportController returns null and adds no DOM nodes to the canvas.
     expect(document.querySelector('[data-testid="viewport-controller"]')).toBeNull();
   });
-
 
   it('setViewport is called on mount when localStorage has a saved viewport', async () => {
     /**
