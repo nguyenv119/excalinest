@@ -35,7 +35,6 @@ import { EdgeDetailPanel } from './components/EdgeDetailPanel';
 import { MultiSelectPanel } from './components/MultiSelectPanel';
 import type { StylePatch } from './api';
 import { ViewportController, VIEWPORT_KEY } from './components/ViewportController';
-import type { ViewportCommand } from './components/ViewportController';
 import {
   fetchNodes,
   fetchEdges,
@@ -247,10 +246,6 @@ export default function App() {
   const selectedNodeIdsRef = useRef<string[]>([]);
   const [mode, setMode] = useState<'pan' | 'select'>('pan');
 
-  // ─── Viewport command + stack for zoom-fit navigation ─────────────────────
-  const [viewportCommand, setViewportCommand] = useState<ViewportCommand | null>(null);
-  const viewportStackRef = useRef<Viewport[]>([]);
-  const getViewportRef = useRef<(() => Viewport) | null>(null);
   // Read once at mount so every re-render uses the same initial value.
   // Avoids reading localStorage on every render (performance + correctness).
   const initialFitViewRef = useRef(!localStorage.getItem(VIEWPORT_KEY));
@@ -364,20 +359,6 @@ export default function App() {
     patchNode(id, { collapsed: newCollapsed ? 1 : 0 }).catch((err) =>
       console.error('Failed to persist collapsed state:', err)
     );
-
-    // Viewport navigation: zoom-fit on expand, restore on collapse
-    if (newCollapsed) {
-      // Collapse: pop the saved viewport and animate back
-      const saved = viewportStackRef.current.pop();
-      if (saved) {
-        setViewportCommand({ type: 'restoreViewport', viewport: saved });
-      }
-    } else {
-      // Expand: snapshot current viewport, then fit the node's children area
-      const currentVp = getViewportRef.current?.();
-      if (currentVp) viewportStackRef.current.push(currentVp);
-      setViewportCommand({ type: 'fitNode', nodeId: id });
-    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Add child node ────────────────────────────────────────────────────────
@@ -1021,9 +1002,6 @@ export default function App() {
         <MiniMap nodeColor="#d07a5a" maskColor="rgba(43,45,42,0.75)" />
         <Toolbar onNodeCreated={handleNodeCreated} mode={mode} onToggleMode={setMode} />
         <ViewportController
-          command={viewportCommand}
-          onCommandHandled={() => setViewportCommand(null)}
-          getViewportRef={getViewportRef}
           screenToFlowPositionRef={screenToFlowPositionRef}
         />
       </ReactFlow>
