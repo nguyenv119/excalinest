@@ -1,10 +1,7 @@
 import type { CanvasNode, CanvasEdge } from './types.js';
 
-// ─── Base URL ────────────────────────────────────────────────────────────────
-
-function baseUrl(): string {
-  return process.env['CANVAS_API_URL'] ?? 'http://localhost:3001';
-}
+// Lazy so tests can override via process.env before each call
+const baseUrl = () => process.env['CANVAS_API_URL'] ?? 'http://localhost:3001';
 
 // ─── Generic request helper ──────────────────────────────────────────────────
 
