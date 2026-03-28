@@ -1,5 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import * as findEmptySpace from "./tools/find-empty-space.js";
+import * as getColorPalette from "./tools/get-color-palette.js";
 import { register as registerGetCanvas } from "./tools/get-canvas.js";
 import { register as registerSearchNodes } from "./tools/search-nodes.js";
 import { register as registerCreateNode } from "./tools/create-node.js";
@@ -14,6 +16,8 @@ const server = new McpServer({
   version: "1.0.0",
 });
 
+findEmptySpace.register(server);
+getColorPalette.register(server);
 registerGetCanvas(server);
 registerSearchNodes(server);
 registerCreateNode(server);
