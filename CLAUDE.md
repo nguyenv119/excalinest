@@ -16,8 +16,9 @@ npm run dev --workspace=client   # Vite dev server only, port 5173
 
 ### Build
 ```bash
-npm run build --workspace=server  # tsc → server/dist/
-npm run build --workspace=client  # vite build → client/dist/
+npm run build --workspace=server      # tsc → server/dist/
+npm run build --workspace=client      # vite build → client/dist/
+npm run build --workspace=mcp-server  # tsc → mcp-server/dist/
 ```
 
 ### Install dependencies
@@ -30,12 +31,14 @@ Run from repo root. npm workspaces hoists shared deps to root `node_modules`.
 
 ## Quality Gates
 
-| Target       | Command                                              | Must pass before commit |
-|--------------|------------------------------------------------------|-------------------------|
-| Server types | `cd server && npx tsc --noEmit`                      | Yes                     |
-| Client types | `cd client && npx tsc --noEmit`                      | Yes                     |
+| Target           | Command                                              | Must pass before commit |
+|------------------|------------------------------------------------------|-------------------------|
+| Server types     | `cd server && npx tsc --noEmit`                      | Yes                     |
+| Client types     | `cd client && npx tsc --noEmit`                      | Yes                     |
+| MCP server types | `cd mcp-server && npx tsc --noEmit`                  | Yes                     |
+| MCP server tests | `npm test --workspace=mcp-server`                    | Yes                     |
 
-No test runner is configured for MVP (personal local tool). Both typecheck commands must exit 0.
+All typecheck commands must exit 0. MCP server has 41 integration tests via vitest.
 
 ---
 
@@ -43,7 +46,7 @@ No test runner is configured for MVP (personal local tool). Both typecheck comma
 
 ```
 knowledge-canvas/
-  package.json                  — npm workspaces ["server","client"], dev script via concurrently
+  package.json                  — npm workspaces ["server","client","mcp-server"], dev script via concurrently
   server/
     package.json                — "type": "commonjs", tsx watch, tsc build
     tsconfig.json               — module: commonjs, target: ES2022, strict
@@ -62,6 +65,26 @@ knowledge-canvas/
       App.css                   — full-height layout; kc-node styles; loading animation
       components/
         CanvasNode.tsx          — NodeProps renderer: title, notes preview, top+bottom Handles
+  mcp-server/
+    package.json                — "type": "module", @modelcontextprotocol/sdk, zod
+    tsconfig.json               — module: Node16, target: ES2022, strict
+    src/
+      index.ts                  — McpServer setup; registers all 10 tools; StdioServerTransport
+      canvas-api.ts             — typed HTTP client (fetch wrappers for Express REST API)
+      types.ts                  — CanvasNode + CanvasEdge interfaces
+      colors.ts                 — 15 color families (Indigo, Purple, Teal, etc.)
+      layout.ts                 — grid layout constants (LEAF_W, LEAF_H, etc.)
+      tools/
+        get-canvas.ts           — hierarchical view of all nodes + edges
+        search-nodes.ts         — case-insensitive text filter on title/notes
+        create-node.ts          — single node creation
+        create-nodes.ts         — bulk creation with client-supplied IDs
+        update-node.ts          — partial node update
+        delete-node.ts          — cascade delete (node + descendants + edges)
+        create-edge.ts          — edge creation between nodes
+        delete-edge.ts          — edge deletion
+        find-empty-space.ts     — suggest (x,y) placement for new clusters
+        get-color-palette.ts    — palette with in-use detection
 ```
 
 ### Key files by concern
@@ -73,6 +96,53 @@ knowledge-canvas/
 | All state + event handlers | `client/src/App.tsx`              |
 | Node CRUD API              | `server/src/routes/nodes.ts`      |
 | Canvas node component      | `client/src/components/CanvasNode.tsx` |
+| MCP server entry point     | `mcp-server/src/index.ts`             |
+| MCP HTTP client            | `mcp-server/src/canvas-api.ts`        |
+| MCP types                  | `mcp-server/src/types.ts`             |
+
+---
+
+## MCP Server
+
+The `mcp-server/` workspace exposes 10 tools via the Model Context Protocol, allowing any MCP client (Claude Desktop, Cursor, etc.) to read and write canvas data.
+
+**Architecture:** MCP client → STDIO → MCP server → HTTP fetch → Express API (:3001) → SQLite
+
+**Important:**
+- Express server must be running (`npm run dev --workspace=server`) for MCP tools to work
+- The MCP server is NOT part of `npm run dev` — STDIO servers are spawned by MCP clients as subprocesses
+- All `console.log` in MCP server code must be `console.error` — stdout is the JSON-RPC protocol channel
+
+### Claude Desktop configuration
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "knowledge-canvas": {
+      "command": "node",
+      "args": ["/Users/nguyenv/knowledge-canvas/knowledge-canvas/mcp-server/dist/index.js"]
+    }
+  }
+}
+```
+
+Build first: `npm run build --workspace=mcp-server`
+
+### Tools (10)
+
+| Tool | Purpose |
+|------|---------|
+| `get_canvas` | Hierarchical view of all nodes + edges |
+| `search_nodes` | Filter nodes by title/notes text |
+| `create_node` | Create a single node |
+| `create_nodes` | Bulk create (for clusters) |
+| `update_node` | Patch node fields |
+| `delete_node` | Delete node + descendants + edges |
+| `create_edge` | Link two nodes |
+| `delete_edge` | Remove a link |
+| `find_empty_space` | Suggest (x,y) for new cluster placement |
+| `get_color_palette` | 15 color families with in-use detection |
 
 ---
 
