@@ -1,6 +1,6 @@
 import type { CanvasNode, CanvasEdge } from './types.js';
 
-const BASE_URL = process.env.CANVAS_API_URL ?? 'http://localhost:3001';
+const BASE_URL = 'http://localhost:3001';
 
 // ─── Generic request helper ──────────────────────────────────────────────────
 
