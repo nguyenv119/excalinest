@@ -2,8 +2,8 @@
  * Integration tests for canvas-api.ts HTTP client functions.
  *
  * These tests spin up a real Express server backed by an in-memory SQLite DB
- * (the same factory used by the server workspace's own tests). The CANVAS_API_URL
- * env var is pointed at the test server's address before each test.
+ * (the same factory used by the server workspace's own tests). The test server
+ * listens on port 3001 — the same port the client hardcodes.
  *
  * Why real server: the client functions are thin wrappers over fetch. Testing
  * them against a mock fetch only proves that we called fetch correctly — it
@@ -13,7 +13,6 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import type { AddressInfo } from 'net';
 import Database from 'better-sqlite3';
 import type { Database as DatabaseType } from 'better-sqlite3';
 
@@ -73,31 +72,23 @@ const SCHEMA = `
 // ─── Server lifecycle ────────────────────────────────────────────────────────
 
 let testDb: DatabaseType;
-let serverUrl: string;
 let httpServer: ReturnType<typeof import('http').createServer>;
 
 beforeAll(async () => {
-  // GIVEN a real Express server backed by an in-memory SQLite database
+  // GIVEN a real Express server on port 3001 (same port the client hardcodes)
   testDb = new Database(':memory:');
   testDb.exec(SCHEMA);
   const app = createApp(testDb);
 
   await new Promise<void>((resolve) => {
-    httpServer = app.listen(0, '127.0.0.1', () => resolve());
+    httpServer = app.listen(3001, '127.0.0.1', () => resolve());
   });
-
-  const addr = httpServer.address() as AddressInfo;
-  serverUrl = `http://127.0.0.1:${addr.port}`;
-
-  // Point the canvas-api client at the test server
-  process.env['CANVAS_API_URL'] = serverUrl;
 });
 
 afterAll(async () => {
   await new Promise<void>((resolve, reject) => {
     httpServer.close((err) => (err ? reject(err) : resolve()));
   });
-  delete process.env['CANVAS_API_URL'];
 });
 
 // ─── getNodes ───────────────────────────────────────────────────────────────

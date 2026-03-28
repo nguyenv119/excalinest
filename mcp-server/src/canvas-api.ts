@@ -1,7 +1,6 @@
 import type { CanvasNode, CanvasEdge } from './types.js';
 
-// Lazy so tests can override via process.env before each call
-const baseUrl = () => process.env['CANVAS_API_URL'] ?? 'http://localhost:3001';
+const BASE_URL = 'http://localhost:3001';
 
 // ─── Generic request helper ──────────────────────────────────────────────────
 
@@ -17,7 +16,7 @@ const baseUrl = () => process.env['CANVAS_API_URL'] ?? 'http://localhost:3001';
  * any non-2xx response.
  */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = `${baseUrl()}${path}`;
+  const url = `${BASE_URL}${path}`;
   const res = await fetch(url, init);
 
   if (!res.ok) {
@@ -34,7 +33,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
  * Correctly avoids calling .json() on an empty body.
  */
 async function requestVoid(path: string, init?: RequestInit): Promise<void> {
-  const url = `${baseUrl()}${path}`;
+  const url = `${BASE_URL}${path}`;
   const res = await fetch(url, init);
 
   if (!res.ok) {
