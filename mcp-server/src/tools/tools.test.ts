@@ -64,7 +64,7 @@ beforeAll(async () => {
   const app = createApp(testDb);
 
   await new Promise<void>((resolve) => {
-    httpServer = app.listen(3002, '127.0.0.1', () => resolve());
+    httpServer = app.listen(3001, '127.0.0.1', () => resolve());
   });
 });
 
@@ -74,25 +74,15 @@ afterAll(async () => {
   });
 });
 
-// We need to override the BASE_URL since these tests use port 3002 to avoid
-// conflicts with the canvas-api.test.ts suite which uses port 3001.
-// We do this by dynamically patching the env before importing tool modules.
-// The canvas-api reads BASE_URL at import time via env var CANVAS_API_URL.
-
-// Set env before any tool imports
-process.env.CANVAS_API_URL = 'http://127.0.0.1:3002';
-
-// Lazy-import tool handler logic after env is set
-const {
-  handleGetCanvas,
-} = await import('./get-canvas.js');
-const { handleSearchNodes } = await import('./search-nodes.js');
-const { handleCreateNode } = await import('./create-node.js');
-const { handleCreateNodes } = await import('./create-nodes.js');
-const { handleUpdateNode } = await import('./update-node.js');
-const { handleDeleteNode } = await import('./delete-node.js');
-const { handleCreateEdge } = await import('./create-edge.js');
-const { handleDeleteEdge } = await import('./delete-edge.js');
+// Import tool handlers — canvas-api.ts hardcodes localhost:3001
+import { handleGetCanvas } from './get-canvas.js';
+import { handleSearchNodes } from './search-nodes.js';
+import { handleCreateNode } from './create-node.js';
+import { handleCreateNodes } from './create-nodes.js';
+import { handleUpdateNode } from './update-node.js';
+import { handleDeleteNode } from './delete-node.js';
+import { handleCreateEdge } from './create-edge.js';
+import { handleDeleteEdge } from './delete-edge.js';
 
 // ─── get_canvas ──────────────────────────────────────────────────────────────
 
