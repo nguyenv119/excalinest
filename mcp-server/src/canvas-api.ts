@@ -1,6 +1,13 @@
 import type { CanvasNode, CanvasEdge } from './types.js';
 
-const BASE_URL = 'http://localhost:3001';
+/**
+ * Returns the base URL for the Canvas API.
+ * Reads from CANVAS_API_URL env var if set, otherwise defaults to localhost:3001.
+ * Must be called at request time (not import time) to allow tests to override.
+ */
+function getBaseUrl(): string {
+  return process.env.CANVAS_API_URL ?? 'http://localhost:3001';
+}
 
 // ─── Generic request helper ──────────────────────────────────────────────────
 
@@ -16,7 +23,7 @@ const BASE_URL = 'http://localhost:3001';
  * any non-2xx response.
  */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = `${BASE_URL}${path}`;
+  const url = `${getBaseUrl()}${path}`;
   const res = await fetch(url, init);
 
   if (!res.ok) {
@@ -33,7 +40,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
  * Correctly avoids calling .json() on an empty body.
  */
 async function requestVoid(path: string, init?: RequestInit): Promise<void> {
-  const url = `${BASE_URL}${path}`;
+  const url = `${getBaseUrl()}${path}`;
   const res = await fetch(url, init);
 
   if (!res.ok) {

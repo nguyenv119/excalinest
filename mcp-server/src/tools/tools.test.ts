@@ -64,11 +64,14 @@ beforeAll(async () => {
   const app = createApp(testDb);
 
   await new Promise<void>((resolve) => {
-    httpServer = app.listen(3001, '127.0.0.1', () => resolve());
+    httpServer = app.listen(0, '127.0.0.1', () => resolve());
   });
+  const addr = httpServer.address() as import('net').AddressInfo;
+  process.env.CANVAS_API_URL = `http://127.0.0.1:${addr.port}`;
 });
 
 afterAll(async () => {
+  delete process.env.CANVAS_API_URL;
   await new Promise<void>((resolve, reject) => {
     httpServer.close((err) => (err ? reject(err) : resolve()));
   });
